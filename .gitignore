@@ -1,3 +1,14 @@
 /output
+/deepface
+/temp_data
+.gitignore
+.cursorignore
 /.idea
+/.vscode
 yolov8x-pose.pt
+yolo11n-pose.pt
+/output_data
+/uploads
+/assests
+/logs
+*.pyc

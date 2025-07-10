@@ -1,0 +1,888 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>分析结果 - Focus Vision</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            width: 95%;
+            max-width: 1200px;
+            background-color: #ffffff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        header {
+            text-align: center;
+            margin-bottom: 25px;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 20px;
+        }
+        header h1 {
+            color: #007bff;
+            font-weight: 500;
+            font-size: 2.2rem;
+        }
+        .source-info {
+            margin-top: 10px;
+            font-style: italic;
+            color: #6c757d;
+            padding: 8px 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            display: inline-block;
+            text-align: center;
+        }
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 25px;
+            margin-bottom: 25px;
+        }
+        .result-card {
+            background-color: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .result-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+        }
+        .result-card h2 {
+            font-size: 1.4rem;
+            color: #0056b3;
+            margin-top: 0;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #d4edff;
+            padding-bottom: 10px;
+        }
+        video, img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        .download-links a {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 10px 18px;
+            background-color: #28a745;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 0.95rem;
+            transition: background-color 0.2s ease;
+        }
+        .download-links a:hover {
+            background-color: #1e7e34;
+        }
+        .stats-section ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .stats-section li {
+            padding: 8px 0;
+            border-bottom: 1px dashed #eee;
+        }
+        .stats-section li:last-child {
+            border-bottom: none;
+        }
+        .stats-section strong {
+            color: #333;
+        }
+        .back-link {
+            display: inline-block;
+            margin-top: 25px;
+            padding: 10px 20px;
+            background-color: #6c757d;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            transition: background-color 0.2s ease;
+            text-align: center;
+        }
+        .back-link:hover {
+            background-color: #545b62;
+        }
+        footer {
+            text-align: center;
+            padding: 20px;
+            margin-top: 20px;
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+         /* 图标样式 */
+        .fas {
+            margin-right: 8px;
+        }
+        /* 按钮样式 */
+        .btn {
+            display: inline-block;
+            padding: 6px 12px;
+            margin-bottom: 0;
+            font-size: 14px;
+            font-weight: 400;
+            line-height: 1.42857143;
+            text-align: center;
+            white-space: nowrap;
+            vertical-align: middle;
+            cursor: pointer;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+        .btn-sm {
+            padding: 5px 10px;
+            font-size: 12px;
+            line-height: 1.5;
+            border-radius: 3px;
+        }
+        .btn-primary {
+            color: #fff;
+            background-color: #007bff;
+            border-color: #007bff;
+        }
+        .btn-primary:hover {
+            background-color: #0056b3;
+            border-color: #004085;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .btn-secondary {
+            color: #fff;
+            background-color: #6c757d;
+            border-color: #6c757d;
+        }
+        .btn-secondary:hover {
+            background-color: #5a6268;
+            border-color: #545b62;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .btn-success {
+            color: #fff;
+            background-color: #28a745;
+            border-color: #28a745;
+        }
+        .btn-success:hover {
+            background-color: #218838;
+            border-color: #1e7e34;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .download-links {
+            margin-top: 15px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 0.25em 0.6em;
+            font-size: 75%;
+            font-weight: 700;
+            line-height: 1;
+            text-align: center;
+            white-space: nowrap;
+            vertical-align: baseline;
+            border-radius: 0.25rem;
+            margin-right: 8px;
+        }
+        .badge-primary {
+            color: #fff;
+            background-color: #007bff;
+        }
+        .badge-success {
+            color: #fff;
+            background-color: #28a745;
+        }
+        .badge-info {
+            color: #fff;
+            background-color: #17a2b8;
+        }
+        .error-message {
+            color: #721c24;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            text-align: center;
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@1.2.1"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-chart-bar"></i> 分析结果</h1>
+            {% if is_stream %}
+                <div class="source-info">
+                    <span class="badge badge-info">视频流分析</span>
+                    {% if stream_description %}
+                        {{ stream_description }}
+                    {% else %}
+                        视频流处理
+                    {% endif %}
+                </div>
+            {% elif original_video %}
+                <div class="source-info">
+                    <span class="badge badge-primary">视频文件分析</span>
+                    原始文件: {{ original_video }}
+                </div>
+            {% endif %}
+        </header>
+
+        <div class="results-grid">
+            {% if processed_video %}
+            <div class="result-card video-card">
+                <h2><i class="fas fa-video"></i> {% if is_stream %}流处理录像{% else %}处理后视频{% endif %} (含标注)</h2>
+                <div style="position: relative; width: 100%; background-color: #000; border-radius: 6px; overflow: hidden;">
+                    <!-- 视频播放部分 - 使用更灵活的多格式配置 -->
+                    <video id="processed-video" controls preload="metadata" style="width: 100%; display: block;">
+                        <!-- 提供多种源格式以增加兼容性 -->
+                        <source src="{{ request.url_root }}output_data/{{ processed_video }}" type="video/mp4" />
+                        <!-- 如果有webm格式也可以添加 -->
+                        <!-- 显示加载中指示器 -->
+                        <div id="loading-indicator" style="position:absolute; top:0; left:0; width:100%; height:100%; 
+                             display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.6);">
+                            <div style="color:white; text-align:center;">
+                                <div class="spinner-border" role="status"></div>
+                                <p>加载中...</p>
+                            </div>
+                        </div>
+                        您的浏览器不支持播放视频。
+                    </video>
+                    
+                    <!-- 备选播放器 -->
+                    <div id="video-fallback" style="text-align: center; padding: 15px; display: none;">
+                        <div class="alert alert-warning">
+                            <strong>视频播放失败</strong>
+                            <p>可能原因: 视频格式不兼容或网络连接问题</p>
+                        </div>
+                        
+                        <div class="btn-group" role="group" style="margin-bottom:15px;">
+                            <a href="{{ request.url_root }}output_data/{{ processed_video }}" 
+                               target="_blank" 
+                               class="btn btn-primary">
+                                <i class="fas fa-external-link-alt"></i> 在新标签打开
+                            </a>
+                            <a href="{{ request.url_root }}output_data/{{ processed_video }}" 
+                               download
+                               class="btn btn-success">
+                                <i class="fas fa-download"></i> 下载视频
+                            </a>
+                            <button id="try-fallback-player" class="btn btn-info">
+                                <i class="fas fa-play-circle"></i> 尝试备用播放器
+                            </button>
+                        </div>
+                        
+                        <!-- 备用播放器容器 -->
+                        <div id="fallback-player-container" style="display:none; margin-top:15px;"></div>
+                    </div>
+                </div>
+                <div class="download-links">
+                    <a href="{{ request.url_root }}output_data/{{ processed_video }}" download class="btn btn-sm btn-success">
+                        <i class="fas fa-download"></i> 下载{% if is_stream %}流处理录像{% else %}处理后视频{% endif %}
+                    </a>
+                </div>
+                <p class="mt-2" style="margin-top: 10px; color: #6c757d;"><small>注：如果视频无法播放，请尝试下载后使用本地播放器观看。</small></p>
+                <div id="video-error" class="error-message" style="display: none;">
+                    无法加载视频，请检查文件是否存在或尝试下载后观看。
+                </div>
+            </div>
+            {% endif %}
+
+            {% if attention_plot %}
+            <div class="result-card plot-card">
+                <h2><i class="fas fa-chart-line"></i> 注意力变化曲线</h2>
+                <div style="position: relative; height: 400px; width: 100%;">
+                    <canvas id="interactiveAttentionChart"></canvas>
+                </div>
+                <div class="chart-controls" style="margin-top: 15px; text-align: center;">
+                    <button id="resetZoom" class="btn btn-sm btn-primary">
+                        <i class="fas fa-search-minus"></i> 重置缩放
+                    </button>
+                    <button id="toggleDataPoints" class="btn btn-sm btn-secondary" style="margin-left: 10px;">
+                        <i class="fas fa-dot-circle"></i> 显示/隐藏数据点
+                    </button>
+                </div>
+                <div class="download-links" style="margin-top: 15px;">
+                    <!-- 使用完整的URL路径 -->
+                    <a href="{{ request.url_root }}output_data/{{ attention_plot }}" download class="btn btn-sm btn-success">
+                        <i class="fas fa-download"></i> 下载曲线图
+                    </a>
+                </div>
+                <p style="margin-top: 10px;"><small>提示：您可以使用鼠标滚轮缩放图表，按住鼠标左键拖动平移。点击图例可以隐藏/显示特定学生的曲线。</small></p>
+                <div id="chart-error" class="error-message" style="display: none;">
+                    无法加载注意力数据，请检查CSV文件是否存在。
+                </div>
+            </div>
+            {% endif %}
+
+            {% if csv_data %}
+            <div class="result-card data-card">
+                <h2><i class="fas fa-file-csv"></i> 详细数据</h2>
+                <p>包含每帧的头部姿态、表情、专注度等详细信息。</p>
+                <div class="download-links">
+                    <!-- 使用完整的URL路径 -->
+                    <a href="{{ request.url_root }}output_data/{{ csv_data }}" download class="btn btn-sm btn-success">
+                        <i class="fas fa-download"></i> 下载CSV数据文件
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+            
+            {% if stats %}
+            <div class="result-card stats-section">
+                <h2><i class="fas fa-clipboard-list"></i> {% if is_stream %}流处理统计{% else %}视频处理统计{% endif %}</h2>
+                <ul>
+                    <li><strong>总处理帧数:</strong> {{ stats.get('total_frames_processed', 'N/A') }}</li>
+                    <li><strong>平均专注度 (所有学生):</strong> {{ "%.2f" % stats.get('average_focus_all', 0.0) if stats.get('average_focus_all') is not none else 'N/A' }}</li>
+                    <!-- 学生个人专注度统计 -->
+                    {% if stats.get('students_summary') %}
+                        {% for student_stat in stats.get('students_summary') %}
+                            <li><strong>学生 {{ student_stat.id }} 平均专注度:</strong> {{ "%.2f" % student_stat.average_focus if student_stat.average_focus is not none else 'N/A' }}</li>
+                        {% endfor %}
+                    {% else %}
+                        <li><strong>未检测到学生或数据不完整</strong></li>
+                    {% endif %}
+                    <li><strong>处理用时:</strong> {{ "%.2f秒" % stats.get('processing_time_seconds', 0.0) if stats.get('processing_time_seconds') is not none else 'N/A' }}</li>
+                    <li><strong>使用设备:</strong> {% if stats.get('gpu_enabled') %}GPU (CUDA){% else %}CPU{% endif %}</li>
+                    {% if stats.get('average_fps') %}
+                    <li><strong>平均处理速度:</strong> {{ "%.2f FPS" % stats.get('average_fps', 0.0) }}</li>
+                    {% endif %}
+                    {% if stats.get('average_processing_time_ms') %}
+                    <li><strong>平均处理时间:</strong> {{ "%.1f 毫秒/帧" % stats.get('average_processing_time_ms', 0.0) }}</li>
+                    {% endif %}
+                    {% if is_stream %}
+                        <li><strong>流类型:</strong> {{ stream_type|upper if stream_type else 'N/A' }}</li>
+                        <li><strong>开始时间:</strong> {{ start_time if start_time else 'N/A' }}</li>
+                        <li><strong>结束时间:</strong> {{ end_time if end_time else 'N/A' }}</li>
+                    {% endif %}
+                </ul>
+            </div>
+            {% else %}
+            <div class="result-card stats-section">
+                <h2><i class="fas fa-clipboard-list"></i> {% if is_stream %}流处理统计{% else %}视频处理统计{% endif %}</h2>
+                <p class="text-danger">未能获取处理统计数据。可能是因为视频处理过程中发生错误。</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <div style="text-align: center; margin-top: 20px;">
+            <a href="{{ url_for('index') }}" class="back-link"><i class="fas fa-home"></i> 返回主页</a>
+            {% if is_stream %}
+                <a href="{{ url_for('index') }}#stream-input" class="back-link" style="margin-left: 15px;"><i class="fas fa-broadcast-tower"></i> 开始新的流分析</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2025 Focus Vision. All Rights Reserved.</p>
+    </footer>
+    
+    {% if processed_video %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('==== 视频诊断开始 ====');
+            
+            // 检查视频是否能正常加载
+            const video = document.getElementById('processed-video');
+            const videoError = document.getElementById('video-error');
+            
+            console.log('视频元素:', video ? '已找到' : '未找到');
+            console.log('视频路径:', video.src);
+            console.log('视频类型:', video.getAttribute('type'));
+            
+            // 尝试直接发送XHR请求检查视频文件是否存在及其响应头
+            const xhr = new XMLHttpRequest();
+            xhr.open('HEAD', "{{ request.url_root }}output_data/{{ processed_video }}", true);
+            
+            xhr.onload = function() {
+                console.log('视频文件HEAD请求状态码:', xhr.status);
+                console.log('视频文件响应头:', xhr.getAllResponseHeaders());
+                
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    console.log('视频文件存在，进一步检查视频格式是否支持');
+                    
+                    // 检查MIME类型是否正确
+                    const contentType = xhr.getResponseHeader('Content-Type');
+                    console.log('视频Content-Type:', contentType);
+                    
+                    if (!contentType || !contentType.includes('video/')) {
+                        console.warn('警告: 服务器返回的不是视频MIME类型:', contentType);
+                    }
+                } else {
+                    console.error('视频文件不存在或无法访问，HTTP状态:', xhr.status);
+                }
+            };
+            
+            xhr.onerror = function() {
+                console.error('视频文件HEAD请求失败，可能是跨域问题或网络错误');
+            };
+            
+            xhr.send();
+            
+            // 检查浏览器支持的视频格式
+            console.log('浏览器视频支持检查:');
+            console.log('- MP4/H.264支持:', video.canPlayType('video/mp4; codecs="avc1.42E01E"') || '不支持');
+            console.log('- WebM/VP8支持:', video.canPlayType('video/webm; codecs="vp8"') || '不支持');
+            console.log('- Ogg/Theora支持:', video.canPlayType('video/ogg; codecs="theora"') || '不支持');
+            
+            // 添加视频事件监听器
+            const videoEvents = [
+                'loadstart', 'progress', 'suspend', 'abort', 'error', 
+                'emptied', 'stalled', 'loadedmetadata', 'loadeddata', 
+                'canplay', 'canplaythrough', 'playing', 'waiting'
+            ];
+            
+            videoEvents.forEach(event => {
+                video.addEventListener(event, function() {
+                    console.log(`视频事件触发: ${event}`);
+                    
+                    if (event === 'error') {
+                        console.error('视频错误码:', video.error ? video.error.code : '未知');
+                        switch(video.error && video.error.code) {
+                            case 1: console.error('错误: MEDIA_ERR_ABORTED - 用户中断加载'); break;
+                            case 2: console.error('错误: MEDIA_ERR_NETWORK - 网络错误'); break;
+                            case 3: console.error('错误: MEDIA_ERR_DECODE - 解码错误'); break;
+                            case 4: console.error('错误: MEDIA_ERR_SRC_NOT_SUPPORTED - 视频格式不支持'); break;
+                            default: console.error('未知错误');
+                        }
+                        
+                        videoError.style.display = 'block';
+                        document.getElementById('video-fallback').style.display = 'block';
+                    }
+                });
+            });
+            
+            // 尝试多种格式加载视频
+            console.log('尝试使用fetch加载视频文件...');
+            
+            fetch("{{ request.url_root }}output_data/{{ processed_video }}")
+                .then(response => {
+                    console.log('视频fetch响应状态:', response.status);
+                    console.log('视频fetch响应类型:', response.headers.get('Content-Type'));
+                    
+                    if (!response.ok) {
+                        throw new Error(`视频请求失败，状态: ${response.status}`);
+                    }
+                    
+                    // 检查Content-Length，确保视频不是空文件
+                    const contentLength = response.headers.get('Content-Length');
+                    console.log('视频大小:', contentLength ? `${Math.round(contentLength/1024)}KB` : '未知');
+                    
+                    if (contentLength && parseInt(contentLength) < 1000) {
+                        console.warn('警告: 视频文件非常小，可能不是有效视频');
+                    }
+                    
+                    return response.blob();
+                })
+                .then(videoBlob => {
+                    console.log('视频Blob类型:', videoBlob.type);
+                    console.log('视频Blob大小:', Math.round(videoBlob.size/1024), 'KB');
+                    
+                    // 尝试使用Blob URL加载视频
+                    const blobUrl = URL.createObjectURL(videoBlob);
+                    console.log('创建Blob URL:', blobUrl);
+                    
+                    // 创建新的视频元素使用Blob URL
+                    const newVideo = document.createElement('video');
+                    newVideo.id = 'blob-video';
+                    newVideo.controls = true;
+                    newVideo.preload = 'metadata';
+                    newVideo.style.width = '100%';
+                    newVideo.style.display = 'block';
+                    newVideo.src = blobUrl;
+                    
+                    // 添加事件监听
+                    newVideo.addEventListener('loadedmetadata', function() {
+                        console.log('Blob视频元数据加载成功!');
+                        console.log('视频时长:', newVideo.duration, '秒');
+                        console.log('视频尺寸:', newVideo.videoWidth, 'x', newVideo.videoHeight);
+                        
+                        // 如果元视频有错误，则显示这个blob视频
+                        if (video.error) {
+                            const videoContainer = video.parentElement;
+                            video.style.display = 'none';
+                            videoContainer.insertBefore(newVideo, video);
+                            console.log('使用Blob URL替代原视频元素');
+                        } else {
+                            console.log('原视频正常，不替换');
+                        }
+                    });
+                    
+                    newVideo.addEventListener('error', function(e) {
+                        console.error('Blob视频加载失败:', e);
+                    });
+                    
+                    return blobUrl;
+                })
+                .catch(err => {
+                    console.error('视频fetch或处理失败:', err);
+                    
+                    // 隐藏加载指示器
+                    document.getElementById('loading-indicator').style.display = 'none';
+                    
+                    // 在备用播放器按钮中添加事件监听
+                    document.getElementById('try-fallback-player').addEventListener('click', function() {
+                        const container = document.getElementById('fallback-player-container');
+                        container.style.display = 'block';
+                        
+                        // 尝试多种播放器选项
+                        console.log('尝试使用备用播放方式...');
+                        
+                        // 选项1: 使用MediaElement.js播放器 (如果可用)
+                        if (window.MediaElement) {
+                            console.log('使用MediaElement.js播放器');
+                            const player = document.createElement('video');
+                            player.src = "{{ request.url_root }}output_data/{{ processed_video }}";
+                            player.width = '100%';
+                            player.controls = true;
+                            container.appendChild(player);
+                            new MediaElement(player);
+                            return;
+                        }
+                        
+                        // 选项2: 使用HLS.js播放器 (用于HLS流)
+                        try {
+                            const hlsVideo = document.createElement('video');
+                            hlsVideo.controls = true;
+                            hlsVideo.style.width = '100%';
+                            container.appendChild(hlsVideo);
+                            
+                            const hlsUrl = "{{ request.url_root }}output_data/{{ processed_video }}";
+                            if (window.Hls && Hls.isSupported()) {
+                                console.log('使用HLS.js播放器');
+                                const hls = new Hls();
+                                hls.loadSource(hlsUrl);
+                                hls.attachMedia(hlsVideo);
+                                return;
+                            }
+                        } catch (e) {
+                            console.log('HLS播放失败:', e);
+                        }
+                        
+                        // 选项3: 使用iframe方式嵌入
+                        console.log('尝试使用iframe嵌入视频...');
+                        const iframe = document.createElement('iframe');
+                        iframe.src = "{{ request.url_root }}output_data/{{ processed_video }}";
+                        iframe.width = '100%';
+                        iframe.height = '400px';
+                        iframe.style.border = 'none';
+                        container.appendChild(iframe);
+                        
+                        // 选项4: 嵌入VLC插件(如果用户安装了)
+                        try {
+                            const vlcDiv = document.createElement('div');
+                            vlcDiv.innerHTML = `
+                                <p>如果您已安装VLC插件，可以尝试用它播放:</p>
+                                <object type="application/x-vlc-plugin" width="100%" height="400">
+                                    <param name="src" value="{{ request.url_root }}output_data/{{ processed_video }}" />
+                                    <param name="autoplay" value="true" />
+                                    <param name="controls" value="true" />
+                                </object>
+                            `;
+                            container.appendChild(vlcDiv);
+                        } catch (e) {
+                            console.log('VLC嵌入失败:', e);
+                        }
+                    });
+                });
+        });
+    </script>
+    {% endif %}
+    
+    {% if attention_plot and csv_data %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 加载CSV数据并绘制交互式图表 - 使用完整URL
+            console.log('准备加载CSV文件:', "{{ request.url_root }}output_data/{{ csv_data }}");
+            
+            // 添加图表容器状态信息
+            const chartContainer = document.getElementById('interactiveAttentionChart');
+            console.log('图表容器状态:', chartContainer ? '已找到' : '未找到');
+            
+            fetch("{{ request.url_root }}output_data/{{ csv_data }}")
+                .then(response => {
+                    console.log('CSV文件响应状态:', response.status);
+                    if (!response.ok) {
+                        throw new Error(`无法加载CSV文件，状态码: ${response.status}`);
+                    }
+                    return response.text();
+                })
+                .then(csvText => {
+                    // 解析CSV数据
+                    const rows = csvText.split('\n');
+                    if (rows.length <= 1) {
+                        throw new Error('CSV文件为空或格式不正确');
+                    }
+                    
+                    const headers = rows[0].split(',');
+                    console.log("CSV列名:", headers);
+                    
+                    // 查找相关列的索引 - 更灵活地处理列名
+                    let frameIndex = headers.indexOf('frame');
+                    let focusIndex = headers.findIndex(col => 
+                        col.includes('focus') || col.includes('score') || col.includes('attention'));
+                    let studentIdIndex = headers.indexOf('student_id');
+                    
+                    console.log("列索引 - frame:", frameIndex, "focus_score:", focusIndex, "student_id:", studentIdIndex);
+                    
+                    // 如果找不到frame列，尝试查找第一个看起来像数字的列
+                    if (frameIndex === -1) {
+                        for (let i = 0; i < headers.length; i++) {
+                            if (!isNaN(parseFloat(rows[1]?.split(',')[i]))) {
+                                frameIndex = i;
+                                console.log("使用数值列作为frame索引:", frameIndex);
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // 如果找不到focus列，尝试使用任何看起来像百分比的列(0-1之间的值)
+                    if (focusIndex === -1) {
+                        for (let i = 0; i < headers.length; i++) {
+                            const value = parseFloat(rows[1]?.split(',')[i]);
+                            if (!isNaN(value) && value >= 0 && value <= 1) {
+                                focusIndex = i;
+                                console.log("使用0-1值列作为focus索引:", focusIndex);
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // 如果仍然无法找到，使用第一列作为frame和第二列作为focus
+                    if (frameIndex === -1 || focusIndex === -1) {
+                        console.log("无法识别列，使用默认列：第1列作为frame，第2列作为focus");
+                        frameIndex = frameIndex === -1 ? 0 : frameIndex;
+                        focusIndex = focusIndex === -1 ? (frameIndex === 1 ? 2 : 1) : focusIndex;
+                    }
+                    
+                    // 提取数据并按学生ID分组
+                    const studentData = {};
+                    const frameLabels = new Set();
+                    
+                    for (let i = 1; i < rows.length; i++) {
+                        if (!rows[i].trim()) continue;
+                        
+                        const columns = rows[i].split(',');
+                        if (columns.length <= Math.max(frameIndex, focusIndex)) {
+                            console.log(`第${i}行数据格式不正确:`, rows[i]);
+                            continue;
+                        }
+                        
+                        const frame = parseInt(columns[frameIndex]);
+                        const focus = parseFloat(columns[focusIndex]);
+                        const studentId = studentIdIndex !== -1 && studentIdIndex < columns.length ? 
+                                         columns[studentIdIndex] : 'all';
+                        
+                        if (isNaN(frame) || isNaN(focus)) {
+                            console.log(`第${i}行数据无效:`, rows[i]);
+                            continue;
+                        }
+                        
+                        frameLabels.add(frame);
+                        
+                        if (!studentData[studentId]) {
+                            studentData[studentId] = [];
+                        }
+                        
+                        studentData[studentId].push({
+                            x: frame,
+                            y: focus
+                        });
+                    }
+                    
+                    if (Object.keys(studentData).length === 0) {
+                        throw new Error('没有有效的注意力数据');
+                    }
+                    
+                    console.log("解析到的学生数据:", Object.keys(studentData));
+                    
+                    // 准备图表数据
+                    const sortedFrames = Array.from(frameLabels).sort((a, b) => a - b);
+                    const datasets = [];
+                    
+                    // 为每个学生创建一个数据集
+                    const colors = [
+                        'rgb(75, 192, 192)',
+                        'rgb(255, 99, 132)',
+                        'rgb(54, 162, 235)',
+                        'rgb(255, 159, 64)',
+                        'rgb(153, 102, 255)',
+                        'rgb(255, 205, 86)',
+                        'rgb(201, 203, 207)'
+                    ];
+                    
+                    let colorIndex = 0;
+                    for (const [studentId, data] of Object.entries(studentData)) {
+                        if (studentId === 'null' || studentId === '') continue;
+                        
+                        const color = colors[colorIndex % colors.length];
+                        colorIndex++;
+                        
+                        datasets.push({
+                            label: studentId === 'all' ? '平均专注度' : `学生 ${studentId}`,
+                            data: data.sort((a, b) => a.x - b.x),
+                            borderColor: color,
+                            backgroundColor: color.replace('rgb', 'rgba').replace(')', ', 0.2)'),
+                            tension: 0.2,
+                            pointRadius: 1,
+                            pointHoverRadius: 5
+                        });
+                    }
+                    
+                    // 创建图表
+                    const ctx = document.getElementById('interactiveAttentionChart').getContext('2d');
+                    const chart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            datasets: datasets
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            interaction: {
+                                mode: 'index',
+                                intersect: false
+                            },
+                            animation: {
+                                duration: 1000,
+                                easing: 'easeOutQuad'
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    max: 1,
+                                    title: {
+                                        display: true,
+                                        text: '专注度',
+                                        font: {
+                                            size: 14,
+                                            weight: 'bold'
+                                        }
+                                    },
+                                    grid: {
+                                        color: 'rgba(0, 0, 0, 0.1)'
+                                    }
+                                },
+                                x: {
+                                    type: 'linear',
+                                    title: {
+                                        display: true,
+                                        text: '帧',
+                                        font: {
+                                            size: 14,
+                                            weight: 'bold'
+                                        }
+                                    },
+                                    grid: {
+                                        color: 'rgba(0, 0, 0, 0.1)'
+                                    }
+                                }
+                            },
+                            plugins: {
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            return `${context.dataset.label}: ${context.parsed.y.toFixed(2)}`;
+                                        }
+                                    }
+                                },
+                                zoom: {
+                                    zoom: {
+                                        wheel: {
+                                            enabled: true,
+                                        },
+                                        pinch: {
+                                            enabled: true
+                                        },
+                                        mode: 'xy',
+                                    },
+                                    pan: {
+                                        enabled: true,
+                                        mode: 'xy',
+                                    }
+                                },
+                                legend: {
+                                    position: 'top',
+                                }
+                            }
+                        }
+                    });
+                    
+                    // 重置缩放按钮
+                    document.getElementById('resetZoom').addEventListener('click', function() {
+                        chart.resetZoom();
+                    });
+                    
+                    // 切换数据点按钮
+                    let showPoints = false;
+                    document.getElementById('toggleDataPoints').addEventListener('click', function() {
+                        showPoints = !showPoints;
+                        chart.data.datasets.forEach(dataset => {
+                            dataset.pointRadius = showPoints ? 3 : 1;
+                            dataset.pointHoverRadius = showPoints ? 7 : 5;
+                        });
+                        chart.update();
+                    });
+                })
+                .catch(error => {
+                    console.error('加载数据失败:', error);
+                    const chartError = document.getElementById('chart-error');
+                    chartError.style.display = 'block';
+                    chartError.textContent = `无法加载注意力数据: ${error.message}`;
+                    
+                    // 尝试直接添加测试图表
+                    try {
+                        console.log('尝试创建测试图表...');
+                        const ctx = document.getElementById('interactiveAttentionChart').getContext('2d');
+                        new Chart(ctx, {
+                            type: 'line',
+                            data: {
+                                labels: ['测试1', '测试2', '测试3'],
+                                datasets: [{
+                                    label: '测试数据',
+                                    data: [0.5, 0.7, 0.3],
+                                    borderColor: 'rgb(75, 192, 192)',
+                                    tension: 0.1
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false
+                            }
+                        });
+                        console.log('测试图表已创建');
+                    } catch (chartError) {
+                        console.error('创建测试图表失败:', chartError);
+                    }
+                    
+                    // 检查图片加载情况
+                    const testImg = new Image();
+                    testImg.onload = function() { console.log('注意力图片可访问'); };
+                    testImg.onerror = function() { console.error('注意力图片不可访问'); };
+                    testImg.src = "{{ request.url_root }}output_data/{{ attention_plot }}";
+                });
+        });
+    </script>
+    {% endif %}
+</body>
+</html> 

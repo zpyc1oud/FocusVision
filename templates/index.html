@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Focus Vision</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            width: 90%;
+            max-width: 800px;
+            margin-top: 30px;
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        header h1 {
+            color: #007bff;
+            font-weight: 500;
+            font-size: 2.5rem;
+        }
+        header p {
+            color: #6c757d;
+            font-size: 1.1rem;
+        }
+        .input-section {
+            margin-bottom: 30px;
+        }
+        .input-tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .input-tab {
+            padding: 10px 15px;
+            cursor: pointer;
+            margin-right: 5px;
+            border: 1px solid transparent;
+            border-top-left-radius: 5px;
+            border-top-right-radius: 5px;
+            position: relative;
+            bottom: -1px;
+            transition: all 0.2s ease;
+        }
+        .input-tab.active {
+            background-color: #fff;
+            border-color: #dee2e6 #dee2e6 #fff;
+            color: #007bff;
+            font-weight: 500;
+        }
+        .input-tab:hover:not(.active) {
+            background-color: #f8f9fa;
+        }
+        .input-content {
+            display: none;
+        }
+        .input-content.active {
+            display: block;
+        }
+        .upload-section {
+            border: 2px dashed #007bff;
+            border-radius: 5px;
+            padding: 30px;
+            text-align: center;
+            background-color: #e9f5ff;
+            transition: background-color 0.3s ease;
+        }
+        .upload-section:hover {
+            background-color: #d4edff;
+        }
+        .upload-section input[type="file"] {
+            display: none; /* 隐藏原生上传按钮 */
+        }
+        .stream-section {
+            border: 2px solid #28a745;
+            border-radius: 5px;
+            padding: 30px;
+            background-color: #f0fff4;
+            transition: background-color 0.3s ease;
+        }
+        .stream-section:hover {
+            background-color: #e2ffeA;
+        }
+        .upload-label, .btn {
+            cursor: pointer;
+            padding: 12px 25px;
+            background-color: #007bff;
+            color: white;
+            border-radius: 5px;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: background-color 0.2s ease;
+            display: inline-block;
+            border: none;
+        }
+        .upload-label:hover, .btn:hover {
+            background-color: #0056b3;
+        }
+        .upload-label i, .btn i {
+            margin-right: 8px;
+        }
+        #fileName {
+            margin-top: 15px;
+            font-style: italic;
+            color: #555;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        .form-control {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 1rem;
+            transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+        }
+        .form-control:focus {
+            border-color: #80bdff;
+            outline: 0;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+        }
+        .submit-button {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 1.1rem;
+            font-weight: 500;
+            margin-top: 20px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        .submit-button:hover {
+            background-color: #1e7e34;
+        }
+        .submit-button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .stream-type-select {
+            margin-bottom: 15px;
+        }
+        .stream-option {
+            display: none;
+        }
+        .stream-option.active {
+            display: block;
+        }
+        .loader {
+            display: none; /* 默认隐藏 */
+            border: 5px solid #f3f3f3; 
+            border-top: 5px solid #007bff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+            margin-top: 20px;
+            text-align: center;
+        }
+        footer {
+            text-align: center;
+            padding: 20px;
+            margin-top: auto; /* 将页脚推到底部 */
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+    </style>
+    <!-- 引入一个图标库，例如 Font Awesome (可选) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-brain"></i> Focus Vision</h1>
+            <p>分析学生的专注度与表情变化，助力智慧课堂。</p>
+        </header>
+
+        {% if error %}
+            <div class="error-message">
+                <strong>处理出错:</strong> {{ error }}
+            </div>
+        {% endif %}
+
+        <div class="input-section">
+            <div class="input-tabs">
+                <div class="input-tab active" data-tab="file-upload">
+                    <i class="fas fa-file-video"></i> 文件上传
+                </div>
+                <div class="input-tab" data-tab="stream-input">
+                    <i class="fas fa-video"></i> 视频流模式
+                </div>
+            </div>
+
+            <div id="file-upload" class="input-content active">
+                <form method="post" enctype="multipart/form-data" id="uploadForm" action="/upload">
+                    <div class="upload-section">
+                        <label for="fileInput" class="upload-label">
+                            <i class="fas fa-cloud-upload-alt"></i> 选择视频文件
+                        </label>
+                        <input type="file" name="file" id="fileInput" accept=".mp4,.avi,.mov,.mkv" required>
+                        <div id="fileName">未选择文件</div>
+                    </div>
+                    <button type="submit" class="submit-button" id="submitBtn" disabled>开始分析</button>
+                </form>
+            </div>
+
+            <div id="stream-input" class="input-content">
+                <form method="post" id="streamForm" action="/stream">
+                    <div class="stream-section">
+                        <div class="form-group stream-type-select">
+                            <label>选择流类型:</label>
+                            <div style="margin-top: 10px;">
+                                <input type="radio" id="webcam" name="stream_type" value="webcam" checked>
+                                <label for="webcam" style="display: inline-block; margin-right: 15px;">本地摄像头</label>
+                                
+                                <input type="radio" id="rtsp" name="stream_type" value="rtsp">
+                                <label for="rtsp" style="display: inline-block; margin-right: 15px;">RTSP流</label>
+                                
+                                <input type="radio" id="http" name="stream_type" value="http">
+                                <label for="http" style="display: inline-block; margin-right: 15px;">HTTP流</label>
+                                
+                                <input type="radio" id="ip_camera" name="stream_type" value="ip_camera">
+                                <label for="ip_camera" style="display: inline-block;">IP摄像头</label>
+                            </div>
+                        </div>
+
+                        <div id="webcam-options" class="stream-option active">
+                            <div class="form-group">
+                                <label for="webcam-select">选择摄像头:</label>
+                                <select id="webcam-select" name="webcam_id" class="form-control">
+                                    <option value="0">默认摄像头</option>
+                                    <option value="1">摄像头 1</option>
+                                    <option value="2">摄像头 2</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div id="rtsp-options" class="stream-option">
+                            <div class="form-group">
+                                <label for="rtsp-url">RTSP 流地址:</label>
+                                <input type="text" id="rtsp-url" name="rtsp_url" class="form-control" 
+                                       placeholder="rtsp://用户名:密码@IP地址:端口/路径">
+                            </div>
+                        </div>
+
+                        <div id="http-options" class="stream-option">
+                            <div class="form-group">
+                                <label for="http-url">HTTP 流地址:</label>
+                                <input type="text" id="http-url" name="http_url" class="form-control" 
+                                       placeholder="http://IP地址:端口/视频流路径">
+                            </div>
+                        </div>
+
+                        <div id="ip-camera-options" class="stream-option">
+                            <div class="form-group">
+                                <label for="ip-address">IP 摄像头地址:</label>
+                                <input type="text" id="ip-address" name="ip_address" class="form-control" 
+                                       placeholder="192.168.1.100">
+                            </div>
+                            <div class="form-group">
+                                <label for="ip-port">端口:</label>
+                                <input type="text" id="ip-port" name="ip_port" class="form-control" 
+                                       value="8080">
+                            </div>
+                            <div class="form-group">
+                                <label for="ip-username">用户名 (可选):</label>
+                                <input type="text" id="ip-username" name="ip_username" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label for="ip-password">密码 (可选):</label>
+                                <input type="password" id="ip-password" name="ip_password" class="form-control">
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="submit-button" id="streamSubmitBtn">开始实时分析</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="loader" id="loader"></div>
+    </div>
+
+    <footer>
+        <p>&copy; 2025 Focus Vision. All Rights Reserved.</p>
+    </footer>
+
+    <script>
+        // 选项卡切换
+        const tabs = document.querySelectorAll('.input-tab');
+        const contents = document.querySelectorAll('.input-content');
+        
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                // 移除所有活动标签
+                tabs.forEach(t => t.classList.remove('active'));
+                contents.forEach(c => c.classList.remove('active'));
+                
+                // 激活当前标签
+                tab.classList.add('active');
+                const tabId = tab.getAttribute('data-tab');
+                document.getElementById(tabId).classList.add('active');
+            });
+        });
+        
+        // 文件上传功能
+        const fileInput = document.getElementById('fileInput');
+        const fileNameDisplay = document.getElementById('fileName');
+        const submitBtn = document.getElementById('submitBtn');
+        const uploadForm = document.getElementById('uploadForm');
+        const loader = document.getElementById('loader');
+
+        fileInput.addEventListener('change', function() {
+            if (fileInput.files.length > 0) {
+                fileNameDisplay.textContent = fileInput.files[0].name;
+                submitBtn.disabled = false;
+            } else {
+                fileNameDisplay.textContent = '未选择文件';
+                submitBtn.disabled = true;
+            }
+        });
+
+        uploadForm.addEventListener('submit', function() {
+            // 检查文件是否已选择
+            if (fileInput.files.length > 0) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = '正在处理中...';
+                loader.style.display = 'block'; // 显示加载动画
+            } else {
+                // 防止在没有文件的情况下提交
+                alert('请先选择一个视频文件。');
+                event.preventDefault(); 
+            }
+        });
+        
+        // 流类型选择切换
+        const streamTypeRadios = document.querySelectorAll('input[name="stream_type"]');
+        const streamOptions = document.querySelectorAll('.stream-option');
+        
+        streamTypeRadios.forEach(radio => {
+            radio.addEventListener('change', function() {
+                // 隐藏所有选项
+                streamOptions.forEach(option => option.classList.remove('active'));
+                
+                // 显示对应的选项
+                const optionId = this.value + '-options';
+                document.getElementById(optionId).classList.add('active');
+            });
+        });
+        
+        // 流表单验证
+        const streamForm = document.getElementById('streamForm');
+        const streamSubmitBtn = document.getElementById('streamSubmitBtn');
+        
+        streamForm.addEventListener('submit', function(event) {
+            // 获取当前选中的流类型
+            const selectedType = document.querySelector('input[name="stream_type"]:checked').value;
+            let isValid = true;
+            
+            // 根据不同类型验证必填字段
+            if (selectedType === 'rtsp') {
+                const rtspUrl = document.getElementById('rtsp-url').value.trim();
+                if (!rtspUrl) {
+                    alert('请输入RTSP流地址');
+                    isValid = false;
+                }
+            } else if (selectedType === 'http') {
+                const httpUrl = document.getElementById('http-url').value.trim();
+                if (!httpUrl) {
+                    alert('请输入HTTP流地址');
+                    isValid = false;
+                }
+            } else if (selectedType === 'ip_camera') {
+                const ipAddress = document.getElementById('ip-address').value.trim();
+                const ipPort = document.getElementById('ip-port').value.trim();
+                if (!ipAddress) {
+                    alert('请输入IP摄像头地址');
+                    isValid = false;
+                } else if (!ipPort) {
+                    alert('请输入端口号');
+                    isValid = false;
+                }
+            }
+            
+            if (!isValid) {
+                event.preventDefault();
+                return;
+            }
+            
+            // 提交前的UI更新
+            streamSubmitBtn.disabled = true;
+            streamSubmitBtn.textContent = '正在连接...';
+            loader.style.display = 'block';
+        });
+    </script>
+</body>
+</html> 

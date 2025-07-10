@@ -2,7 +2,9 @@ import math
 
 import cv2
 import numpy as np
-from typing import Optional, Any
+import matplotlib.pyplot as plt
+import pandas as pd
+from typing import Optional, Any, Dict, Union, List
 
 # --- 默认 COCO 17 个关键点的连接方式 ---
 DEFAULT_SKELETON = [
@@ -31,6 +33,29 @@ DEFAULT_PALETTE = [
 ]
 
 def estimate_pitch(nose, left_eye, right_eye, left_ear, right_ear):
+    """
+    估计人头部的俯仰角（pitch）
+    
+    该函数通过脸部关键点的相对位置计算头部俯仰角度，
+    并使用左右耳的距离差来校正头部的偏航角影响。
+    
+    算法步骤：
+    1. 计算眼睛中心点位置
+    2. 计算鼻子到眼睛中心的向量
+    3. 估计头部的偏航角（yaw）
+    4. 校正水平分量
+    5. 计算俯仰角度
+    
+    Args:
+        nose (array-like): 鼻子关键点的坐标 [x, y]
+        left_eye (array-like): 左眼关键点的坐标 [x, y]
+        right_eye (array-like): 右眼关键点的坐标 [x, y]
+        left_ear (array-like): 左耳关键点的坐标 [x, y]
+        right_ear (array-like): 右耳关键点的坐标 [x, y]
+        
+    Returns:
+        float: 头部俯仰角（以度为单位），正值表示低头，负值表示抬头
+    """
     # 1. 眼睛中心
     eye_cx = (left_eye[0] + right_eye[0]) / 2
     eye_cy = (left_eye[1] + right_eye[1]) / 2
@@ -73,6 +98,15 @@ def plot_pose_from_yolo_results(
 ) -> np.ndarray:
     """
     在图像上绘制姿态估计的关键点和骨架，输入基于 YOLOv8 Pose 输出格式。
+    
+    该函数用于可视化YOLO姿态检测模型的输出结果，将检测到的人体关键点和骨架
+    绘制在原始图像上。主要用于专注度检测系统中的可视化展示部分。
+    
+    功能包括：
+    1. 绘制人体骨架的关键点（如鼻子、眼睛、耳朵、肩膀等）
+    2. 连接关键点形成骨架线条
+    3. 可选绘制边界框和关键点标签
+    4. 支持多人同时绘制，每个人使用不同颜色
 
     Args:
         image (np.ndarray): 输入图像 (OpenCV BGR 格式).
@@ -199,3 +233,177 @@ def plot_pose_from_yolo_results(
                         cv2.line(output_image, pt1, pt2, line_color, line_thickness, cv2.LINE_AA) # 抗锯齿
 
     return output_image
+
+def plot_attention_over_time(
+    data: Union[pd.DataFrame, Dict[str, List[float]]],
+    output_path: str,
+    x_col: str = "frame",
+    y_col: str = "focus_score",
+    student_id_col: str = "student_id",
+    title: str = "专注度随时间变化",
+    student_id: Optional[str] = None,
+    include_emotions: bool = True,
+    emotion_col: str = "emotion",
+    figsize: tuple = (12, 8),
+    dpi: int = 100
+):
+    """
+    绘制专注度随时间变化的曲线图，并可选择性地显示情绪数据
+    
+    该函数用于可视化学生专注度的时间序列数据，支持以下功能：
+    1. 绘制专注度随时间变化的折线图
+    2. 可选地标记不同情绪状态的数据点
+    3. 支持筛选单个学生或显示所有学生的数据
+    4. 添加图例、网格线和标题
+    5. 将图表保存为图像文件
+    
+    在专注度检测系统中，该函数用于生成最终的分析报告和可视化结果。
+
+    Args:
+        data: 专注度数据，可以是pandas DataFrame或包含列表的字典
+              必须包含frame/timestamp、focus_score和student_id列
+        output_path: 图表保存路径（PNG格式）
+        x_col: X轴列名（默认为"frame"帧数）
+        y_col: Y轴列名（默认为"focus_score"专注度分数）
+        student_id_col: 学生ID列名
+        title: 图表标题
+        student_id: 要筛选的特定学生ID，None表示所有学生
+        include_emotions: 是否在图表中包含情绪数据
+        emotion_col: 情绪数据的列名
+        figsize: 图表尺寸（宽度，高度）（英寸）
+        dpi: 图表分辨率（每英寸点数）
+
+    Returns:
+        None: 图表将保存到指定路径
+    """
+    # 设置默认的Matplotlib样式
+    plt.style.use('ggplot')
+    
+    # 确保输入数据是DataFrame
+    if not isinstance(data, pd.DataFrame):
+        data = pd.DataFrame(data)
+    
+    # 如果数据为空，创建一个简单的提示图
+    if data.empty:
+        plt.figure(figsize=figsize, dpi=dpi)
+        plt.text(0.5, 0.5, "No Available Data", ha='center', va='center', fontsize=20)
+        plt.title(title)
+        plt.tight_layout()
+        plt.savefig(output_path)
+        plt.close()
+        return
+
+    # 创建图形
+    fig, ax1 = plt.subplots(figsize=figsize, dpi=dpi)
+    
+    # 检查是否需要筛选特定学生
+    if student_id is not None:
+        if student_id_col in data.columns:
+            data = data[data[student_id_col] == student_id]
+        else:
+            print(f"警告: 找不到'{student_id_col}'列，将使用所有数据")
+    
+    # 确保所需的列存在
+    if x_col not in data.columns:
+        print(f"错误: 找不到'{x_col}'列，使用索引作为X轴")
+        data[x_col] = data.index
+    
+    if y_col not in data.columns:
+        print(f"错误: 找不到'{y_col}'列，无法绘制专注度")
+        return
+    
+    # 绘制专注度曲线
+    if student_id_col in data.columns and len(data[student_id_col].unique()) > 1:
+        # 多个学生，使用不同颜色
+        for sid, group in data.groupby(student_id_col):
+            label = f"Student {sid}" if sid is not None else "Unidentified"
+            ax1.plot(group[x_col], group[y_col], '-o', markersize=4, linewidth=2, label=label)
+    else:
+        # 单个学生或没有学生ID列
+        ax1.plot(data[x_col], data[y_col], '-o', markersize=4, linewidth=2, color='blue', label='专注度')
+    
+    # 设置Y轴范围为0-1，因为专注度分数通常在这个范围内
+    ax1.set_ylim(0, 1)
+    ax1.set_xlabel('Frame' if x_col == "frame" else x_col)
+    ax1.set_ylabel('Focus Score')
+    
+    # 如果要包含情绪数据并且存在情绪列
+    if include_emotions and emotion_col in data.columns:
+        # 在右侧创建一个标记情绪的轴
+        ax2 = ax1.twinx()
+        
+        # 情绪类别到数值的映射
+        emotion_categories = {
+            'neutral': 0, 'happy': 1, 'sad': 2, 'angry': 3, 
+            'fear': 4, 'disgust': 5, 'surprise': 6, 'unknown': 7
+        }
+        
+        # 情绪类别到颜色的映射
+        emotion_colors = {
+            'neutral': 'gray', 'happy': 'yellow', 'sad': 'blue',
+            'angry': 'red', 'fear': 'purple', 'disgust': 'brown',
+            'surprise': 'cyan', 'unknown': 'black'
+        }
+        
+        # 转换情绪为数值
+        data['emotion_value'] = data[emotion_col].apply(
+            lambda x: emotion_categories.get(x, 7) if isinstance(x, str) else 7
+        )
+        
+        # 如果有多个学生，为每个学生绘制情绪
+        if student_id_col in data.columns and len(data[student_id_col].unique()) > 1:
+            for sid, group in data.groupby(student_id_col):
+                # 为每种情绪使用不同的标记和颜色
+                for emotion, value in emotion_categories.items():
+                    emotion_data = group[group[emotion_col] == emotion]
+                    if not emotion_data.empty:
+                        ax2.scatter(
+                            emotion_data[x_col],
+                            [value] * len(emotion_data),
+                            marker='s',
+                            color=emotion_colors.get(emotion, 'black'),
+                            s=50,
+                            alpha=0.7,
+                            label=f"{emotion} (Student {sid})"
+                        )
+        else:
+            # 单个学生或没有学生ID列
+            for emotion, value in emotion_categories.items():
+                emotion_data = data[data[emotion_col] == emotion]
+                if not emotion_data.empty:
+                    ax2.scatter(
+                        emotion_data[x_col],
+                        [value] * len(emotion_data),
+                        marker='s',
+                        color=emotion_colors.get(emotion, 'black'),
+                        s=50,
+                        alpha=0.7,
+                        label=emotion
+                    )
+        
+        # 设置右侧Y轴
+        ax2.set_ylabel('Emotion Category')
+        ax2.set_yticks(list(emotion_categories.values()))
+        ax2.set_yticklabels(list(emotion_categories.keys()))
+        ax2.grid(False)
+    
+    # 添加图例
+    handles1, labels1 = ax1.get_legend_handles_labels()
+    if include_emotions and emotion_col in data.columns:
+        handles2, labels2 = ax2.get_legend_handles_labels()
+        # 合并图例并去重
+        by_label = dict(zip(labels1 + labels2, handles1 + handles2))
+        ax1.legend(by_label.values(), by_label.keys(), loc='upper right')
+    else:
+        ax1.legend(loc='upper right')
+    
+    # 添加网格和标题
+    ax1.grid(True, linestyle='--', alpha=0.7)
+    plt.title(title)
+    plt.tight_layout()
+    
+    # 保存图表
+    plt.savefig(output_path)
+    plt.close()
+    
+    print(f"图表已保存至: {output_path}")

@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>处理中 - Focus Vision</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            width: 95%;
+            max-width: 1200px;
+            background-color: #ffffff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        header {
+            text-align: center;
+            margin-bottom: 25px;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 20px;
+        }
+        header h1 {
+            color: #007bff;
+            font-weight: 500;
+            font-size: 2.2rem;
+        }
+        .source-info {
+            margin-top: 10px;
+            font-style: italic;
+            color: #6c757d;
+            padding: 8px 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            display: inline-block;
+        }
+        .processing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 25px;
+            margin-bottom: 25px;
+        }
+        .processing-card {
+            background-color: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .processing-card h2 {
+            font-size: 1.4rem;
+            color: #0056b3;
+            margin-top: 0;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #d4edff;
+            padding-bottom: 10px;
+        }
+        .video-container {
+            position: relative;
+            width: 100%;
+            border-radius: 4px;
+            overflow: hidden;
+            background-color: #000;
+        }
+        video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        #liveVideo {
+            width: 100%;
+            max-height: 500px;
+            object-fit: contain;
+        }
+        .progress-container {
+            margin-top: 15px;
+        }
+        .progress-bar {
+            height: 25px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #28a745;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        .stats-container {
+            margin-top: 15px;
+        }
+        .stats-list {
+            list-style-type: none;
+            padding: 0;
+        }
+        .stats-list li {
+            padding: 8px 0;
+            border-bottom: 1px dashed #eee;
+            display: flex;
+            justify-content: space-between;
+        }
+        .stats-value {
+            font-weight: bold;
+        }
+        .chart-container {
+            width: 100%;
+            height: 300px;
+            margin-top: 10px;
+        }
+        .action-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .btn {
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            border: none;
+            color: white;
+        }
+        .btn-primary {
+            background-color: #007bff;
+        }
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+        .btn-success {
+            background-color: #28a745;
+        }
+        .btn-success:hover {
+            background-color: #218838;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+        .btn-secondary:hover {
+            background-color: #5a6268;
+        }
+        .btn-danger {
+            background-color: #dc3545;
+        }
+        .btn-danger:hover {
+            background-color: #bd2130;
+        }
+        footer {
+            text-align: center;
+            padding: 20px;
+            margin-top: 20px;
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+        .fas {
+            margin-right: 8px;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .stream-mode {
+            display: none;
+        }
+        .file-mode {
+            display: block;
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@1.2.1"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1 id="pageTitle"><i class="fas fa-cog fa-spin"></i> 视频处理中</h1>
+            <p id="pageDescription">请等待系统处理完成，您可以在此页面实时查看处理进度</p>
+            <div id="sourceInfo" class="source-info" style="display: none;"></div>
+        </header>
+
+        <div class="processing-grid">
+            <div class="processing-card">
+                <h2><i class="fas fa-video"></i> 实时处理预览</h2>
+                <div class="video-container">
+                    <img id="currentFrameImage" src="/temp_data/placeholder.jpg" alt="当前处理帧" style="width: 100%; max-height: 500px; object-fit: contain; border: 1px solid #ddd; background-color: #f8f9fa;">
+                </div>
+                <div id="progressContainer" class="progress-container file-mode">
+                    <div class="progress-bar">
+                        <div id="progressFill" class="progress-fill" style="width: 0%">0%</div>
+                    </div>
+                    <p id="progressText" class="text-center mt-2">正在处理中...</p>
+                </div>
+                <div id="streamInfoContainer" class="progress-container stream-mode">
+                    <p id="streamInfo" class="text-center mt-2">
+                        <span class="badge bg-primary">实时流模式</span>
+                        已处理: <span id="streamFrames">0</span> 帧 | 
+                        运行时间: <span id="streamTime">0</span> 秒
+                    </p>
+                </div>
+            </div>
+
+            <div class="processing-card">
+                <h2><i class="fas fa-chart-line"></i> 实时注意力曲线</h2>
+                <div class="chart-container">
+                    <canvas id="attentionChart"></canvas>
+                </div>
+                <div class="stats-container">
+                    <h3>当前统计</h3>
+                    <ul class="stats-list">
+                        <li>
+                            <span>已处理帧数:</span>
+                            <span id="processedFrames" class="stats-value">0</span>
+                        </li>
+                        <li>
+                            <span>平均专注度:</span>
+                            <span id="averageFocus" class="stats-value">0.00</span>
+                        </li>
+                        <li>
+                            <span>处理用时:</span>
+                            <span id="processingTime" class="stats-value">0秒</span>
+                        </li>
+                        <li>
+                            <span>使用设备:</span>
+                            <span id="deviceInfo" class="stats-value">CPU</span>
+                        </li>
+                        <li>
+                            <span>处理速度:</span>
+                            <span id="processingFps" class="stats-value">0.00 FPS</span>
+                        </li>
+                        <li>
+                            <span>平均处理时间:</span>
+                            <span id="avgProcessingTime" class="stats-value">0.00 毫秒/帧</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="action-buttons">
+            <!-- 文件模式按钮 -->
+            <div id="fileModeButtons" class="file-mode">
+                <button id="pauseBtn" class="btn btn-secondary">
+                    <i class="fas fa-pause"></i> 暂停处理
+                </button>
+                <button id="resumeBtn" class="btn btn-primary" disabled>
+                    <i class="fas fa-play"></i> 继续处理
+                </button>
+                <button id="completeBtn" class="btn btn-success" disabled>
+                    <i class="fas fa-check"></i> 完成并查看结果
+                </button>
+            </div>
+            
+            <!-- 流模式按钮 -->
+            <div id="streamModeButtons" class="stream-mode">
+                <button id="pauseStreamBtn" class="btn btn-secondary">
+                    <i class="fas fa-pause"></i> 暂停流处理
+                </button>
+                <button id="resumeStreamBtn" class="btn btn-primary" disabled>
+                    <i class="fas fa-play"></i> 继续流处理
+                </button>
+                <button id="stopStreamBtn" class="btn btn-danger">
+                    <i class="fas fa-stop"></i> 停止流处理
+                </button>
+                <button id="completeStreamBtn" class="btn btn-success" disabled>
+                    <i class="fas fa-check"></i> 查看结果
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2025 Focus Vision. All Rights Reserved.</p>
+    </footer>
+
+    <script>
+        // 初始化注意力曲线图
+        const ctx = document.getElementById('attentionChart').getContext('2d');
+        const attentionChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [], // 时间/帧标签
+                datasets: [{
+                    label: '专注度',
+                    data: [], // 专注度数据
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    tension: 0.2,
+                    pointRadius: 1,
+                    pointHoverRadius: 5
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 1,
+                        title: {
+                            display: true,
+                            text: '专注度'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: '处理帧'
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return `专注度: ${context.parsed.y.toFixed(2)}`;
+                            }
+                        }
+                    },
+                    zoom: {
+                        zoom: {
+                            wheel: {
+                                enabled: true,
+                            },
+                            pinch: {
+                                enabled: true
+                            },
+                            mode: 'xy',
+                        },
+                        pan: {
+                            enabled: true,
+                            mode: 'xy',
+                        }
+                    }
+                }
+            }
+        });
+
+        // 轮询获取实时处理状态
+        let processingInterval;
+        let processingComplete = false;
+        let isStreamMode = false;
+
+        function startPolling() {
+            processingInterval = setInterval(updateProcessingStatus, 1000);
+        }
+
+        function stopPolling() {
+            clearInterval(processingInterval);
+        }
+
+        function updateProcessingStatus() {
+            fetch('/processing_status')
+                .then(response => response.json())
+                .then(data => {
+                    // 判断是否为流模式
+                    isStreamMode = data.is_stream === true;
+                    
+                    // 根据模式更新UI
+                    updateUIBasedOnMode(isStreamMode, data);
+                    
+                    // 更新统计数据
+                    document.getElementById('processedFrames').textContent = data.current_frame;
+                    document.getElementById('averageFocus').textContent = data.average_focus.toFixed(2);
+                    document.getElementById('processingTime').textContent = `${data.elapsed_time.toFixed(1)}秒`;
+                    
+                    // 更新GPU和性能指标
+                    document.getElementById('deviceInfo').textContent = data.gpu_enabled ? "GPU (CUDA)" : "CPU";
+                    document.getElementById('processingFps').textContent = `${data.processing_fps.toFixed(2)} FPS`;
+                    document.getElementById('avgProcessingTime').textContent = `${data.avg_processing_time.toFixed(1)} 毫秒/帧`;
+                    
+                    // 更新流模式特定信息
+                    if (isStreamMode) {
+                        document.getElementById('streamFrames').textContent = data.current_frame;
+                        document.getElementById('streamTime').textContent = data.elapsed_time.toFixed(1);
+                        if (data.stream_description) {
+                            document.getElementById('sourceInfo').textContent = `来源: ${data.stream_description}`;
+                            document.getElementById('sourceInfo').style.display = 'inline-block';
+                        }
+                    }
+                    
+                    // 更新图表数据
+                    if (data.focus_data && data.focus_data.length > 0) {
+                        // 只添加新数据点
+                        const currentDataLength = attentionChart.data.labels.length;
+                        const newData = data.focus_data.slice(currentDataLength);
+                        
+                        newData.forEach(point => {
+                            attentionChart.data.labels.push(point.frame);
+                            attentionChart.data.datasets[0].data.push(point.focus);
+                        });
+                        
+                        // 如果数据点太多，可以考虑只保留最后N个点
+                        const maxPoints = 500;
+                        if (attentionChart.data.labels.length > maxPoints) {
+                            attentionChart.data.labels = attentionChart.data.labels.slice(-maxPoints);
+                            attentionChart.data.datasets[0].data = attentionChart.data.datasets[0].data.slice(-maxPoints);
+                        }
+                        
+                        attentionChart.update();
+                    }
+                    
+                    // 检查处理是否完成
+                    if (data.status === 'completed') {
+                        processingComplete = true;
+                        if (isStreamMode) {
+                            document.getElementById('completeStreamBtn').disabled = false;
+                            document.getElementById('pauseStreamBtn').disabled = true;
+                            document.getElementById('resumeStreamBtn').disabled = true;
+                            document.getElementById('stopStreamBtn').disabled = true;
+                        } else {
+                            document.getElementById('completeBtn').disabled = false;
+                            document.getElementById('pauseBtn').disabled = true;
+                            document.getElementById('resumeBtn').disabled = true;
+                        }
+                        document.getElementById('progressText').textContent = '处理完成！';
+                        document.getElementById('pageTitle').innerHTML = '<i class="fas fa-check-circle"></i> 处理完成';
+                        stopPolling();
+                    }
+                })
+                .catch(error => {
+                    console.error('获取处理状态失败:', error);
+                });
+        }
+        
+        // 根据模式更新UI
+        function updateUIBasedOnMode(isStream, data) {
+            // 更新页面标题和描述
+            if (isStream) {
+                document.getElementById('pageTitle').innerHTML = '<i class="fas fa-broadcast-tower"></i> 视频流处理中';
+                document.getElementById('pageDescription').textContent = '系统正在处理实时视频流，您可以随时查看分析结果或停止处理';
+                
+                // 显示流模式UI，隐藏文件模式UI
+                document.querySelectorAll('.stream-mode').forEach(el => el.style.display = 'block');
+                document.querySelectorAll('.file-mode').forEach(el => el.style.display = 'none');
+            } else {
+                // 更新进度条（仅文件模式）
+                const progress = data.progress;
+                document.getElementById('progressFill').style.width = `${progress}%`;
+                document.getElementById('progressFill').textContent = `${progress.toFixed(1)}%`;
+                document.getElementById('progressText').textContent = 
+                    `已处理: ${data.current_frame}/${data.total_frames} 帧 - 用时: ${data.elapsed_time.toFixed(1)}秒`;
+                
+                // 显示文件模式UI，隐藏流模式UI
+                document.querySelectorAll('.file-mode').forEach(el => el.style.display = 'block');
+                document.querySelectorAll('.stream-mode').forEach(el => el.style.display = 'none');
+            }
+        }
+
+        // 初始化页面
+        document.addEventListener('DOMContentLoaded', function() {
+            // 开始轮询处理状态
+            startPolling();
+            
+            // 文件模式按钮事件
+            document.getElementById('pauseBtn').addEventListener('click', function() {
+                fetch('/pause_processing', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'paused') {
+                            this.disabled = true;
+                            document.getElementById('resumeBtn').disabled = false;
+                        }
+                    });
+            });
+            
+            document.getElementById('resumeBtn').addEventListener('click', function() {
+                fetch('/resume_processing', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'running') {
+                            this.disabled = true;
+                            document.getElementById('pauseBtn').disabled = false;
+                        }
+                    });
+            });
+            
+            document.getElementById('completeBtn').addEventListener('click', function() {
+                window.location.href = '/results';
+            });
+            
+            // 流模式按钮事件
+            document.getElementById('pauseStreamBtn').addEventListener('click', function() {
+                fetch('/pause_processing', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'paused') {
+                            this.disabled = true;
+                            document.getElementById('resumeStreamBtn').disabled = false;
+                        }
+                    });
+            });
+            
+            document.getElementById('resumeStreamBtn').addEventListener('click', function() {
+                fetch('/resume_processing', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'running') {
+                            this.disabled = true;
+                            document.getElementById('pauseStreamBtn').disabled = false;
+                        }
+                    });
+            });
+            
+            document.getElementById('stopStreamBtn').addEventListener('click', function() {
+                if (confirm('确定要停止流处理吗？当前已处理的数据将被保存。')) {
+                    fetch('/stop_stream', { method: 'POST' })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'stopped') {
+                                this.disabled = true;
+                                document.getElementById('pauseStreamBtn').disabled = true;
+                                document.getElementById('resumeStreamBtn').disabled = true;
+                                document.getElementById('completeStreamBtn').disabled = false;
+                                document.getElementById('pageTitle').innerHTML = '<i class="fas fa-check-circle"></i> 流处理已停止';
+                            } else {
+                                alert('停止流处理失败: ' + data.message);
+                            }
+                        });
+                }
+            });
+            
+            document.getElementById('completeStreamBtn').addEventListener('click', function() {
+                window.location.href = '/results';
+            });
+            
+            // 定期刷新图片
+            setInterval(function() {
+                if (!processingComplete) {
+                    const frameImg = document.getElementById('currentFrameImage');
+                    // 添加时间戳参数以避免缓存
+                    const timestamp = new Date().getTime();
+                    
+                    fetch('/processing_status')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.last_frame_path) {
+                                const framePath = data.last_frame_path;
+                                frameImg.src = '/temp_data/' + framePath.replace(/^.*[\\\/]temp_data[\\\/]/, '') + '?t=' + timestamp;
+                                console.log('更新图片路径:', frameImg.src);
+                            }
+                        })
+                        .catch(err => {
+                            console.error('获取处理状态失败:', err);
+                        });
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html> 
