@@ -33,6 +33,7 @@ from logging.handlers import RotatingFileHandler
 import datetime
 from focus_vision.focus_detector import FocusDetector
 from focus_vision.utils import plot_attention_over_time
+from collections import deque
 
 # 配置日志系统
 def setup_logger():
@@ -140,9 +141,9 @@ GPU_AVAILABLE = setup_gpu()
 app = Flask(__name__) # 创建Flask应用
 
 # --- 配置 --- #
-UPLOAD_FOLDER = 'uploads'
-OUTPUT_FOLDER = 'output_data' # 用于存储处理后的视频和CSV
-TEMP_FOLDER = 'temp_data' # 用于存储处理过程中的临时文件
+UPLOAD_FOLDER = os.path.join('storage', 'uploads')
+OUTPUT_FOLDER = os.path.join('storage', 'output_data') # 用于存储处理后的视频和CSV
+TEMP_FOLDER = os.path.join('storage', 'temp_data') # 用于存储处理过程中的临时文件
 ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['OUTPUT_FOLDER'] = OUTPUT_FOLDER
@@ -193,7 +194,7 @@ Path(OUTPUT_FOLDER).mkdir(parents=True, exist_ok=True)
 Path(TEMP_FOLDER).mkdir(parents=True, exist_ok=True)
 
 # 创建一个占位图片，用于processing页面初始加载
-placeholder_img_path = os.path.join(TEMP_FOLDER, 'placeholder.jpg')
+placeholder_img_path = os.path.join('templates', 'placeholder.jpg')
 if not os.path.exists(placeholder_img_path):
     placeholder = np.ones((300, 400, 3), dtype=np.uint8) * 255  # 白色背景
     cv2.putText(placeholder, "Waiting...", (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
@@ -228,8 +229,12 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # 初始化专注度检测器 (可以稍后根据需要加载不同模型)
-# 如果GPU可用，则使用GPU
-focus_detector = FocusDetector(use_gpu=GPU_AVAILABLE)
+# 如果GPU可用，则使用GPU，并启用并行模型池
+pool_size = 4 if GPU_AVAILABLE else max(1, min(4, (os.cpu_count() or 2)))
+logger.info(f"初始化专注度检测器，GPU可用: {GPU_AVAILABLE}，模型池大小: {pool_size}")
+# DeepFace并发数：GPU下建议小于等于4，CPU下可与模型池一致或略小
+deepface_cc = 4 if GPU_AVAILABLE else max(1, min(pool_size, 4))
+focus_detector = FocusDetector(use_gpu=GPU_AVAILABLE, model_pool_size=pool_size, deepface_concurrency=deepface_cc)
 
 @app.route('/')
 def index():
@@ -459,35 +464,9 @@ def process_stream_async(stream_source, stream_type, output_video_path, output_c
 
         # 设置输出视频
         try:
-            # 优先使用H.264编码器，这是浏览器兼容性最好的编码器
-            # 注意：我们只尝试兼容性最好的几种编码器，并确保它们能被浏览器正确解码
-            codecs = ['avc1', 'H264', 'mp4v']  # 按优先级排序
-            fourcc = None
-            
-            for codec in codecs:
-                try:
-                    logger.debug(f"尝试视频编码器: {codec}")
-                    fourcc_code = cv2.VideoWriter_fourcc(*codec)
-                    test_output = os.path.join(temp_frames_dir, "test.mp4")
-                    # 使用实际尺寸和参数，确保测试准确
-                    test_writer = cv2.VideoWriter(test_output, fourcc_code, fps, (width, height))
-                    
-                    if test_writer.isOpened():
-                        fourcc = fourcc_code
-                        test_writer.release()
-                        if os.path.exists(test_output):
-                            os.unlink(test_output)
-                        logger.info(f"成功使用视频编码器: {codec}")
-                        break
-                    test_writer.release()
-                except Exception as e:
-                    logger.warning(f"编码器 {codec} 不可用: {e}")
-            
-            if fourcc is None:
-                # 如果所有编码器都失败，使用最通用的mp4v编码
-                logger.warning("所有编码器尝试失败，使用mp4v编码器")
-                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            
+            # 为避免libopenh264相关错误，统一使用mp4v编码器写入MP4容器
+            # mp4v在Windows + OpenCV默认环境兼容性较好且不依赖外部H.264库
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
             
             # 检查视频写入器是否正确创建
@@ -507,9 +486,12 @@ def process_stream_async(stream_source, stream_type, output_video_path, output_c
         # 记录开始时间
         start_time = time.time()
         frame_count = 0
+        written_count = 0
         focus_data_list = []
         max_frames_to_keep = 100  # 最多保留的实时数据点数
         processing_times = []  # 用于存储每帧处理时间
+        inflight = deque()
+        max_inflight = max(1, focus_detector.model_pool_size * 2)
         
         # 主处理循环
         while True:
@@ -541,57 +523,61 @@ def process_stream_async(stream_source, stream_type, output_video_path, output_c
                 
                 continue
             
-            # 测量处理时间
-            frame_start_time = time.time()
-            
-            # 处理当前帧
-            vis_frame, frame_data = focus_detector.process_frame(frame)
-            
-            # 计算处理时间
-            frame_processing_time = time.time() - frame_start_time
-            processing_times.append(frame_processing_time)
-            
-            # 计算经过时间
-            elapsed_time = time.time() - start_time
-            
-            # 计算平均专注度
-            avg_focus = 0
-            if frame_data['students']:
-                avg_focus = sum(student['focus_score'] for student in frame_data['students']) / len(frame_data['students'])
-            
-            # 添加到实时数据
-            focus_data_list.append({
-                'frame': frame_count,
-                'focus': avg_focus
-            })
-            
-            # 只保留最近的N个数据点
-            if len(focus_data_list) > max_frames_to_keep:
-                focus_data_list = focus_data_list[-max_frames_to_keep:]
-            
-            # 保存当前帧到临时文件，用于流式显示
-            current_frame_path = os.path.join(temp_frames_dir, f"frame_{frame_count:06d}.jpg")
-            cv2.imwrite(current_frame_path, vis_frame)
-            
-            # 写入视频
-            out.write(vis_frame)
-            
-            # 计算性能统计
-            avg_processing_time = sum(processing_times[-30:]) / min(len(processing_times), 30) if processing_times else 0
-            current_fps = 1.0 / avg_processing_time if avg_processing_time > 0 else 0
-            
-            # 更新处理状态 - 使用绝对路径
-            processing_status['current_frame'] = frame_count
-            processing_status['elapsed_time'] = elapsed_time
-            processing_status['last_frame_path'] = os.path.abspath(current_frame_path)
-            processing_status['focus_data'] = focus_data_list
-            processing_status['average_focus'] = sum(item['focus'] for item in focus_data_list) / len(focus_data_list) if focus_data_list else 0
-            processing_status['processing_fps'] = current_fps
-            processing_status['avg_processing_time'] = avg_processing_time * 1000  # 转换为毫秒
-            
-            # 添加到CSV数据
-            if frame_count % 5 == 0:  # 每5帧保存一次
-                focus_detector._append_csv_data(frame_data, frame_count)
+            # 提交当前帧进行并行处理
+            submit_time = time.time()
+            future = focus_detector.process_frame_async(frame)
+            inflight.append((frame_count, submit_time, future))
+
+            # 当在途任务超限时，取出最早结果并写入
+            if len(inflight) > max_inflight:
+                idx, st, fut = inflight.popleft()
+                vis_frame, frame_data = fut.result()
+                frame_processing_time = time.time() - st
+                processing_times.append(frame_processing_time)
+
+                # 计算经过时间
+                elapsed_time = time.time() - start_time
+
+                # 计算平均专注度
+                avg_focus = 0
+                if frame_data['students']:
+                    avg_focus = sum(student['focus_score'] for student in frame_data['students']) / len(frame_data['students'])
+
+                # 添加到实时数据
+                focus_data_list.append({
+                    'frame': idx,
+                    'focus': avg_focus
+                })
+
+                # 只保留最近的N个数据点
+                if len(focus_data_list) > max_frames_to_keep:
+                    focus_data_list = focus_data_list[-max_frames_to_keep:]
+
+                # 保存当前帧到临时文件，用于流式显示
+                current_frame_path = os.path.join(temp_frames_dir, f"frame_{idx:06d}.jpg")
+                cv2.imwrite(current_frame_path, vis_frame)
+
+                # 写入视频
+                out.write(vis_frame)
+
+                # 计算性能统计
+                avg_processing_time = sum(processing_times[-30:]) / min(len(processing_times), 30) if processing_times else 0
+                current_fps = 1.0 / avg_processing_time if avg_processing_time > 0 else 0
+
+                # 更新处理状态 - 使用绝对路径
+                processing_status['current_frame'] = idx
+                processing_status['elapsed_time'] = elapsed_time
+                processing_status['last_frame_path'] = os.path.abspath(current_frame_path)
+                processing_status['focus_data'] = focus_data_list
+                processing_status['average_focus'] = sum(item['focus'] for item in focus_data_list) / len(focus_data_list) if focus_data_list else 0
+                processing_status['processing_fps'] = current_fps
+                processing_status['avg_processing_time'] = avg_processing_time * 1000  # 转换为毫秒
+
+                # 添加到CSV数据（以写入索引为准）
+                if written_count % 5 == 0:
+                    focus_detector._append_csv_data(frame_data, idx)
+
+                written_count += 1
             
             frame_count += 1
             
@@ -601,13 +587,28 @@ def process_stream_async(stream_source, stream_type, output_video_path, output_c
                 avg_fps = 1.0 / (sum(processing_times[-30:]) / min(len(processing_times), 30)) if processing_times and sum(processing_times[-30:]) > 0 else 0
                 logger.info(f"流处理中: 已处理{frame_count}帧，运行时间 {elapsed_time:.1f}秒 | FPS: {avg_fps:.2f} | 处理时间: {avg_time_ms:.1f}ms/帧")
             
-            # 控制帧率，避免CPU占用过高
-            if not GPU_AVAILABLE and frame_processing_time < 0.03:  # 如果处理够快，可以小睡一下
+            # 控制帧率，避免CPU占用过高（使用最近一次处理时间）
+            last_time = processing_times[-1] if processing_times else 0
+            if not GPU_AVAILABLE and last_time < 0.03:
                 time.sleep(0.01)
         
         # 完成处理
         cap.release()
         out.release()
+
+        # 刷新剩余在途任务
+        while inflight:
+            idx, st, fut = inflight.popleft()
+            vis_frame, frame_data = fut.result()
+            current_frame_path = os.path.join(temp_frames_dir, f"frame_{idx:06d}.jpg")
+            cv2.imwrite(current_frame_path, vis_frame)
+            out.write(vis_frame)
+            processing_times.append(time.time() - st)
+            written_count += 1
+            processing_status['current_frame'] = idx
+            processing_status['last_frame_path'] = os.path.abspath(current_frame_path)
+            if written_count % 5 == 0:
+                focus_detector._append_csv_data(frame_data, idx)
         
         # 保存CSV数据和生成曲线图
         if focus_detector.focus_data:
@@ -643,7 +644,8 @@ def process_stream_async(stream_source, stream_type, output_video_path, output_c
                 except Exception as e:
                     print(f"处理CSV和生成图表时出错: {e}")
         
-        # 标记处理完成
+        # 标记处理完成，并确保进度显示为100%
+        processing_status['progress'] = 100
         processing_status['status'] = 'completed'
         
         # 更新文件路径为绝对路径
@@ -803,35 +805,8 @@ def process_video_async(video_path, output_video_path, output_csv_path, output_p
         
         # 设置输出视频
         try:
-            # 使用更通用的编码器
-            # 在Windows上，首选XVID编码器，在其他平台上尝试H264或avc1
-            codecs = ['avc1', 'H264', 'mp4v']  # 按优先级排序，排除XVID（浏览器兼容性差）
-            fourcc = None
-            
-            for codec in codecs:
-                try:
-                    logger.debug(f"流处理 - 尝试视频编码器: {codec}")
-                    fourcc_code = cv2.VideoWriter_fourcc(*codec)
-                    test_output = os.path.join(temp_frames_dir, "test.mp4")
-                    # 使用实际尺寸和参数，确保测试准确
-                    test_writer = cv2.VideoWriter(test_output, fourcc_code, fps, (width, height))
-                    
-                    if test_writer.isOpened():
-                        fourcc = fourcc_code
-                        test_writer.release()
-                        if os.path.exists(test_output):
-                            os.unlink(test_output)
-                        logger.info(f"流处理 - 成功使用视频编码器: {codec}")
-                        break
-                    test_writer.release()
-                except Exception as e:
-                    logger.warning(f"流处理 - 编码器 {codec} 不可用: {e}")
-            
-            if fourcc is None:
-                # 如果所有编码器都失败，使用最通用的mp4v编码
-                logger.warning("流处理 - 所有编码器尝试失败，使用mp4v编码器")
-                fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 最后尝试XVID
-            
+            # 为避免libopenh264相关错误，统一使用mp4v编码器写入MP4容器
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
             
             # 检查视频写入器是否正确创建
@@ -849,8 +824,11 @@ def process_video_async(video_path, output_video_path, output_csv_path, output_p
         # 记录开始时间
         start_time = time.time()
         frame_count = 0
+        written_count = 0
         focus_data_list = []
         processing_times = []  # 用于存储每帧处理时间
+        inflight = deque()
+        max_inflight = max(1, focus_detector.model_pool_size * 2)
         
         # 主处理循环
         while True:
@@ -863,63 +841,94 @@ def process_video_async(video_path, output_video_path, output_csv_path, output_p
             if not ret:
                 break
 
-            # 测量处理时间
-            frame_start_time = time.time()
+            # 提交帧进行并行处理
+            submit_time = time.time()
+            try:
+                future = focus_detector.process_frame_async(frame)
+                inflight.append((frame_count, submit_time, future))
+            except Exception as e:
+                logger.error(f"提交帧处理任务失败: {e}")
 
-            # 处理当前帧
-            vis_frame, frame_data = focus_detector.process_frame(frame)
+            # 当在途任务超限时，取出最早结果并写入
+            if len(inflight) > max_inflight:
+                idx, st, fut = inflight.popleft()
+                try:
+                    vis_frame, frame_data = fut.result()
+                except Exception as e:
+                    logger.error(f"并行帧处理失败 (frame {idx}): {e}")
+                    continue
 
-            # 计算处理时间
-            frame_processing_time = time.time() - frame_start_time
-            processing_times.append(frame_processing_time)
+                frame_processing_time = time.time() - st
+                processing_times.append(frame_processing_time)
 
-            # 计算进度
-            progress = (frame_count / total_frames) * 100
-            elapsed_time = time.time() - start_time
+                # 写入视频
+                out.write(vis_frame)
 
-            # 计算平均专注度
-            avg_focus = 0
-            if frame_data['students']:
-                avg_focus = sum(student['focus_score'] for student in frame_data['students']) / len(frame_data['students'])
+                # 计算平均专注度
+                avg_focus = 0
+                if frame_data['students']:
+                    avg_focus = sum(student['focus_score'] for student in frame_data['students']) / len(frame_data['students'])
 
-            # 添加到实时数据
-            focus_data_list.append({
-                'frame': frame_count,
-                'focus': avg_focus
-            })
+                # 添加到实时数据
+                focus_data_list.append({
+                    'frame': idx,
+                    'focus': avg_focus
+                })
 
-            # 保存当前帧到临时文件，用于流式显示
-            current_frame_path = os.path.join(temp_frames_dir, f"frame_{frame_count:06d}.jpg")
-            cv2.imwrite(current_frame_path, vis_frame)
+                # 保存当前帧到临时文件，用于流式显示
+                current_frame_path = os.path.join(temp_frames_dir, f"frame_{idx:06d}.jpg")
+                cv2.imwrite(current_frame_path, vis_frame)
 
-            # 写入视频
-            out.write(vis_frame)
+                # 计算性能统计
+                avg_processing_time = sum(processing_times) / len(processing_times) if processing_times else 0
+                current_fps = 1.0 / avg_processing_time if avg_processing_time > 0 else 0
 
-            # 计算性能统计
-            avg_processing_time = sum(processing_times) / len(processing_times) if processing_times else 0
-            current_fps = 1.0 / avg_processing_time if avg_processing_time > 0 else 0
+                # 更新处理状态 - 使用绝对路径
+                elapsed_time = time.time() - start_time
+                progress = (written_count / total_frames) * 100 if total_frames > 0 else 0
+                processing_status['progress'] = progress
+                processing_status['current_frame'] = idx
+                processing_status['elapsed_time'] = elapsed_time
+                processing_status['last_frame_path'] = os.path.abspath(current_frame_path)
+                processing_status['focus_data'] = focus_data_list
+                processing_status['average_focus'] = sum(item['focus'] for item in focus_data_list) / len(focus_data_list) if focus_data_list else 0
+                processing_status['processing_fps'] = current_fps
+                processing_status['avg_processing_time'] = avg_processing_time * 1000  # 转换为毫秒
 
-            # 更新处理状态 - 使用绝对路径
-            processing_status['progress'] = progress
-            processing_status['current_frame'] = frame_count
-            processing_status['elapsed_time'] = elapsed_time
-            processing_status['last_frame_path'] = os.path.abspath(current_frame_path)
-            processing_status['focus_data'] = focus_data_list
-            processing_status['average_focus'] = sum(item['focus'] for item in focus_data_list) / len(focus_data_list) if focus_data_list else 0
-            processing_status['processing_fps'] = current_fps
-            processing_status['avg_processing_time'] = avg_processing_time * 1000  # 转换为毫秒
-            
+                # 添加到CSV数据（以写入索引为准）
+                if written_count % 5 == 0:
+                    focus_detector._append_csv_data(frame_data, idx)
+                written_count += 1
+
             frame_count += 1
-            
-            # 每10帧打印一次状态
-            if frame_count % 10 == 0:
+
+            # 每10帧打印一次状态（基于已写入帧）
+            if written_count % 10 == 0 and written_count > 0:
                 avg_time_ms = sum(processing_times) / len(processing_times) * 1000 if processing_times else 0
                 avg_fps = 1.0 / (sum(processing_times) / len(processing_times)) if processing_times else 0
-                logger.info(f"Progress: {frame_count}/{total_frames} ({progress:.1f}%) | FPS: {avg_fps:.2f} | 处理时间: {avg_time_ms:.1f}ms/帧")
+                logger.info(f"Progress: {written_count}/{total_frames} ({processing_status['progress']:.1f}%) | FPS: {avg_fps:.2f} | 处理时间: {avg_time_ms:.1f}ms/帧")
         
         # 完成处理
         cap.release()
         out.release()
+
+        # 刷新剩余在途任务
+        while inflight:
+            idx, st, fut = inflight.popleft()
+            try:
+                vis_frame, frame_data = fut.result()
+            except Exception as e:
+                logger.error(f"并行帧处理失败 (frame {idx}): {e}")
+                continue
+            current_frame_path = os.path.join(temp_frames_dir, f"frame_{idx:06d}.jpg")
+            cv2.imwrite(current_frame_path, vis_frame)
+            out.write(vis_frame)
+            processing_times.append(time.time() - st)
+            written_count += 1
+            processing_status['current_frame'] = idx
+            processing_status['last_frame_path'] = os.path.abspath(current_frame_path)
+            if written_count % 5 == 0:
+                focus_detector._append_csv_data(frame_data, idx)
         
         # 保存CSV数据和生成曲线图
         if focus_detector.focus_data:
@@ -989,6 +998,12 @@ def process_video_async(video_path, output_video_path, output_csv_path, output_p
         # 将统计信息保存到processing_status，以便results路由可以使用
         processing_status['processing_stats'] = processing_stats
     
+        # 关闭检测器的线程池以释放资源
+        try:
+            focus_detector.shutdown()
+        except Exception:
+            pass
+
     except Exception as e:
         logger.error(f"视频处理过程中出错: {e}")
         processing_status['status'] = 'error'
@@ -1295,6 +1310,20 @@ def temp_file(filepath):
     except Exception as e:
         logger.error(f"访问临时文件时出错: {str(e)}")
         return f"访问临时文件时出错: {str(e)}", 500
+
+# 提供模板目录中的静态资源访问（如占位图）
+@app.route('/templates/<path:filename>')
+def templates_file(filename):
+    try:
+        template_dir = os.path.abspath('templates')
+        file_path = os.path.join(template_dir, filename)
+        if not os.path.isfile(file_path):
+            logger.warning(f"请求的模板文件不存在: {file_path}")
+            return f"模板文件不存在: {filename}", 404
+        return send_from_directory(template_dir, filename)
+    except Exception as e:
+        logger.error(f"访问模板文件时出错: {str(e)}")
+        return f"访问模板文件时出错: {str(e)}", 500
 
 if __name__ == '__main__':
     app.run(debug=False)

@@ -209,7 +209,7 @@
             <div class="processing-card">
                 <h2><i class="fas fa-video"></i> 实时处理预览</h2>
                 <div class="video-container">
-                    <img id="currentFrameImage" src="/temp_data/placeholder.jpg" alt="当前处理帧" style="width: 100%; max-height: 500px; object-fit: contain; border: 1px solid #ddd; background-color: #f8f9fa;">
+                    <img id="currentFrameImage" src="/templates/placeholder.jpg" alt="当前处理帧" style="width: 100%; max-height: 500px; object-fit: contain; border: 1px solid #ddd; background-color: #f8f9fa;">
                 </div>
                 <div id="progressContainer" class="progress-container file-mode">
                     <div class="progress-bar">
@@ -370,6 +370,11 @@
         let processingInterval;
         let processingComplete = false;
         let isStreamMode = false;
+        // 客户端帧率计算：使用帧增量/时间增量并做EWMA平滑
+        let prevFrame = null;
+        let prevTime = null;
+        let ewmaFps = 0.0;
+        const fpsAlpha = 0.3; // 平滑系数，越大越灵敏
 
         function startPolling() {
             processingInterval = setInterval(updateProcessingStatus, 1000);
@@ -394,10 +399,30 @@
                     document.getElementById('averageFocus').textContent = data.average_focus.toFixed(2);
                     document.getElementById('processingTime').textContent = `${data.elapsed_time.toFixed(1)}秒`;
                     
-                    // 更新GPU和性能指标
+                    // 更新GPU信息
                     document.getElementById('deviceInfo').textContent = data.gpu_enabled ? "GPU (CUDA)" : "CPU";
-                    document.getElementById('processingFps').textContent = `${data.processing_fps.toFixed(2)} FPS`;
-                    document.getElementById('avgProcessingTime').textContent = `${data.avg_processing_time.toFixed(1)} 毫秒/帧`;
+
+                    // 计算并显示更精确的客户端实时帧率
+                    let clientFps = 0.0;
+                    if (prevFrame !== null && prevTime !== null) {
+                        const dFrames = Math.max(0, data.current_frame - prevFrame);
+                        const dTime = Math.max(0, data.elapsed_time - prevTime);
+                        if (dTime > 0) {
+                            clientFps = dFrames / dTime;
+                            // EWMA平滑，避免抖动
+                            ewmaFps = ewmaFps === 0.0 ? clientFps : (fpsAlpha * clientFps + (1 - fpsAlpha) * ewmaFps);
+                        }
+                    }
+                    prevFrame = data.current_frame;
+                    prevTime = data.elapsed_time;
+
+                    // 优先显示客户端计算的FPS，若无法计算则回退到服务端值
+                    const displayFps = (ewmaFps && ewmaFps > 0) ? ewmaFps : (data.processing_fps || 0.0);
+                    document.getElementById('processingFps').textContent = `${displayFps.toFixed(2)} FPS`;
+
+                    // 平均处理时间与FPS保持一致：根据显示的FPS推导，避免不一致
+                    let displayMsPerFrame = (displayFps > 0) ? (1000.0 / displayFps) : (data.avg_processing_time || 0.0);
+                    document.getElementById('avgProcessingTime').textContent = `${displayMsPerFrame.toFixed(1)} 毫秒/帧`;
                     
                     // 更新流模式特定信息
                     if (isStreamMode) {
@@ -443,6 +468,10 @@
                             document.getElementById('pauseBtn').disabled = true;
                             document.getElementById('resumeBtn').disabled = true;
                         }
+                        // 显示100%完成进度
+                        const progressEl = document.getElementById('progressFill');
+                        progressEl.style.width = '100%';
+                        progressEl.textContent = '100%';
                         document.getElementById('progressText').textContent = '处理完成！';
                         document.getElementById('pageTitle').innerHTML = '<i class="fas fa-check-circle"></i> 处理完成';
                         stopPolling();
@@ -465,9 +494,11 @@
                 document.querySelectorAll('.file-mode').forEach(el => el.style.display = 'none');
             } else {
                 // 更新进度条（仅文件模式）
-                const progress = data.progress;
-                document.getElementById('progressFill').style.width = `${progress}%`;
-                document.getElementById('progressFill').textContent = `${progress.toFixed(1)}%`;
+                let progress = Math.max(0, Math.min(100, data.progress || 0));
+                const completed = data.status === 'completed' || progress >= 99.9;
+                const displayProgress = completed ? 100 : progress;
+                document.getElementById('progressFill').style.width = `${displayProgress}%`;
+                document.getElementById('progressFill').textContent = `${displayProgress.toFixed(1)}%`;
                 document.getElementById('progressText').textContent = 
                     `已处理: ${data.current_frame}/${data.total_frames} 帧 - 用时: ${data.elapsed_time.toFixed(1)}秒`;
                 
@@ -578,4 +609,4 @@
         });
     </script>
 </body>
-</html> 
+</html>

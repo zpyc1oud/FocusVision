@@ -364,9 +364,7 @@
                     {% endif %}
                     <li><strong>处理用时:</strong> {{ "%.2f秒" % stats.get('processing_time_seconds', 0.0) if stats.get('processing_time_seconds') is not none else 'N/A' }}</li>
                     <li><strong>使用设备:</strong> {% if stats.get('gpu_enabled') %}GPU (CUDA){% else %}CPU{% endif %}</li>
-                    {% if stats.get('average_fps') %}
-                    <li><strong>平均处理速度:</strong> {{ "%.2f FPS" % stats.get('average_fps', 0.0) }}</li>
-                    {% endif %}
+                    <li><strong>平均处理速度:</strong> {{ "%.2f FPS" % ( (stats.get('average_fps', 0.0) if (stats.get('average_fps') is not none and stats.get('average_fps') > 0) else ( (stats.get('total_frames_processed', 0) / stats.get('processing_time_seconds', 1.0)) if stats.get('processing_time_seconds', 0.0) > 0 else 0.0 ) ) ) }}</li>
                     {% if stats.get('average_processing_time_ms') %}
                     <li><strong>平均处理时间:</strong> {{ "%.1f 毫秒/帧" % stats.get('average_processing_time_ms', 0.0) }}</li>
                     {% endif %}
@@ -885,4 +883,4 @@
     </script>
     {% endif %}
 </body>
-</html> 
+</html>

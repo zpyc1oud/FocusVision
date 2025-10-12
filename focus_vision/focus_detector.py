@@ -3,6 +3,9 @@ import cv2
 import numpy as np
 import pandas as pd
 import time
+import threading
+import queue
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from ultralytics import YOLO
 from focus_vision.utils import plot_pose_from_yolo_results
@@ -25,7 +28,7 @@ class FocusDetector:
     最终可生成专注度随时间变化的数据，用于课堂教学分析和优化。
     """
     
-    def __init__(self, model_path="yolo11n-pose.pt", focus_threshold=30, emotion_weight=0.3, use_gpu=False):
+    def __init__(self, model_path="yolo11n-pose.pt", focus_threshold=30, emotion_weight=0.3, use_gpu=False, model_pool_size=1, deepface_concurrency=1):
         """
         初始化专注度检测器
         
@@ -34,15 +37,21 @@ class FocusDetector:
             focus_threshold (int): 头部角度阈值(度)，超过此角度视为不专注（低头），默认30度
             emotion_weight (float): 表情在专注度评估中的权重 (0-1)，默认0.3，表示表情因素占30%权重
             use_gpu (bool): 是否使用GPU加速推理，默认False。自动检测GPU可用性
+            model_pool_size (int): 并行模型实例数量，默认1（不开并行）
+            deepface_concurrency (int): DeepFace并发分析的最大并发数，默认1（串行，最安全）
         """
         # 设置模型设备
         self.device = "cuda" if use_gpu else "cpu"
         print(f"使用设备: {self.device} 进行专注度检测")
         
-        # 加载YOLO模型，指定设备
-        self.model = YOLO(model_path)
+        # 加载YOLO模型池，指定设备
+        self.model_pool_size = max(1, int(model_pool_size))
+        self.models = [YOLO(model_path) for _ in range(self.model_pool_size)]
         if use_gpu:
-            self.model.to(self.device)
+            for m in self.models:
+                m.to(self.device)
+        # 兼容原先接口，保留主模型引用
+        self.model = self.models[0]
         
         # 配置DeepFace (DeepFace会自动使用可用的GPU)
         self.use_gpu = use_gpu
@@ -52,6 +61,15 @@ class FocusDetector:
         self.emotion_weight = emotion_weight
         self.focus_data = []
         self.frame_count = 0
+        self._state_lock = threading.Lock()
+        # DeepFace并发控制：使用有界信号量允许有限并发，默认1为串行
+        self.deepface_concurrency = max(1, int(deepface_concurrency))
+        self._deepface_semaphore = threading.BoundedSemaphore(value=self.deepface_concurrency)
+        # 并行执行器与模型分配队列
+        self._executor = ThreadPoolExecutor(max_workers=self.model_pool_size)
+        self._model_queue = queue.Queue()
+        for idx in range(self.model_pool_size):
+            self._model_queue.put(idx)
         
         # 表情与专注度的映射关系，表示各种表情对应的专注度系数（0-1）
         self.emotion_focus_map = {
@@ -194,10 +212,15 @@ class FocusDetector:
             deepface_options = {
                 'actions': ['emotion'],
                 'enforce_detection': False,
-                'silent': True
+                'silent': True,
+                'detector_backend': 'yolov11n',  # 使用YOLO最小模型进行人脸检测
             }
-            # 执行情绪分析
-            emotion_result = DeepFace.analyze(face_img, **deepface_options)
+            # 执行情绪分析（通过信号量限制并发，默认串行）
+            self._deepface_semaphore.acquire()
+            try:
+                emotion_result = DeepFace.analyze(face_img, **deepface_options)
+            finally:
+                self._deepface_semaphore.release()
             
             # 在列表情况下取第一个结果
             if isinstance(emotion_result, list):
@@ -211,10 +234,106 @@ class FocusDetector:
             emotion_focus_score = self.emotion_focus_map.get(dominant_emotion, 0.5)
             
             return dominant_emotion, emotion_scores, emotion_focus_score
-        
+
         except Exception as e:
             print(f"表情分析错误: {e}")
             return "unknown", {}, 0.5
+
+    def _detect_faces_emotions(self, frame):
+        """
+        在整帧上使用DeepFace（yolov11n后端）检测所有人脸并分析情绪。
+
+        返回值为列表，每个元素包含：
+        - 'region': {'x','y','w','h'} 人脸框
+        - 'dominant_emotion': 主要情绪
+        - 'emotion': 各情绪置信度字典
+        """
+        try:
+            options = {
+                'actions': ['emotion'],
+                'detector_backend': 'yolov11n',
+                'enforce_detection': False,
+                'silent': True,
+                'align': True,
+            }
+            # 使用信号量控制DeepFace分析并发，避免会话竞态
+            self._deepface_semaphore.acquire()
+            try:
+                res = DeepFace.analyze(frame, **options)
+            finally:
+                self._deepface_semaphore.release()
+
+            # 规范化为列表[dict]
+            if isinstance(res, dict):
+                faces = [res]
+            elif isinstance(res, list):
+                # 可能是 [dict, dict, ...] 或 [[dict, ...]]
+                if len(res) > 0 and isinstance(res[0], dict):
+                    faces = res
+                elif len(res) > 0 and isinstance(res[0], list):
+                    faces = res[0]
+                else:
+                    faces = []
+            else:
+                faces = []
+
+            return faces
+        except Exception as e:
+            print(f"整帧人脸情绪检测失败: {e}")
+            return []
+
+    @staticmethod
+    def _iou(boxA, boxB):
+        """计算两个框的IoU，框格式为(x1,y1,x2,y2)"""
+        ax1, ay1, ax2, ay2 = boxA
+        bx1, by1, bx2, by2 = boxB
+        inter_x1 = max(ax1, bx1)
+        inter_y1 = max(ay1, by1)
+        inter_x2 = min(ax2, bx2)
+        inter_y2 = min(ay2, by2)
+        inter_w = max(0, inter_x2 - inter_x1)
+        inter_h = max(0, inter_y2 - inter_y1)
+        inter = inter_w * inter_h
+        areaA = max(0, ax2 - ax1) * max(0, ay2 - ay1)
+        areaB = max(0, bx2 - bx1) * max(0, by2 - by1)
+        union = areaA + areaB - inter + 1e-6
+        return inter / union
+
+    def _match_face_to_person(self, person_box, faces):
+        """
+        将DeepFace检测到的人脸与YOLO人物框进行匹配。
+
+        优先策略：
+        1) 选取中心点落在人物框内的人脸，按IoU最高取最佳
+        2) 若无中心点在内，则选择IoU最高的人脸
+        """
+        px1, py1, px2, py2 = map(float, person_box[:4])
+        best = None
+        best_iou = 0.0
+        best_inside = False
+
+        for f in faces:
+            r = f.get('region', {})
+            fx, fy, fw, fh = r.get('x'), r.get('y'), r.get('w'), r.get('h')
+            if fx is None or fy is None or fw is None or fh is None:
+                continue
+            fx1, fy1 = float(fx), float(fy)
+            fx2, fy2 = fx1 + float(fw), fy1 + float(fh)
+            cx, cy = fx1 + fw / 2.0, fy1 + fh / 2.0
+            inside = (px1 <= cx <= px2) and (py1 <= cy <= py2)
+            iou = self._iou((px1, py1, px2, py2), (fx1, fy1, fx2, fy2))
+
+            if inside:
+                if (not best_inside) or (iou > best_iou):
+                    best = f
+                    best_iou = iou
+                    best_inside = True
+            else:
+                if (not best_inside) and (iou > best_iou):
+                    best = f
+                    best_iou = iou
+
+        return best
     
     def _calculate_combined_focus(self, pose_focus, emotion_focus):
         """
@@ -235,7 +354,7 @@ class FocusDetector:
         combined_focus = (1 - self.emotion_weight) * pose_focus + self.emotion_weight * emotion_focus
         return combined_focus
     
-    def process_frame(self, frame):
+    def process_frame(self, frame, model_override=None):
         """
         处理单帧图像，检测姿态并评估专注度
         
@@ -256,10 +375,12 @@ class FocusDetector:
             tuple: (处理后的图像(np.ndarray), 专注度数据字典(dict))
                   专注度数据字典包含帧号、时间戳和每个检测到人的专注度信息
         """
-        self.frame_count += 1
+        with self._state_lock:
+            self.frame_count += 1
         
         # 使用YOLO模型检测姿态，根据配置指定设备
-        results = self.model(frame, verbose=False, device=self.device)
+        model_to_use = model_override if model_override is not None else self.model
+        results = model_to_use(frame, verbose=False, device=self.device)
         result = results[0]
         
         # 获取关键点
@@ -267,6 +388,9 @@ class FocusDetector:
         
         # 获取边界框
         boxes = result.boxes.data.cpu().numpy() if result.boxes is not None else None
+
+        # 在整帧上用DeepFace检测所有人脸及其情绪
+        faces_info = self._detect_faces_emotions(frame)
         
         # 创建用于可视化的图像
         vis_img = frame.copy()
@@ -286,28 +410,32 @@ class FocusDetector:
             # 评估基于姿态的专注度
             pose_focus_score = self._assess_focus(head_angle)
             
-            # 提取人脸区域进行情绪分析
-            face_img = None
-            if boxes is not None and i < len(boxes):
-                x1, y1, x2, y2 = map(int, boxes[i][:4])
-                
-                # 扩大框选区域，以确保包含完整面部
-                face_h = y2 - y1
-                face_w = x2 - x1
-                y1 = max(0, y1 - int(face_h * 0.1))  # 向上扩展10%
-                x1 = max(0, x1 - int(face_w * 0.1))  # 向左扩展10%
-                x2 = min(frame.shape[1], x2 + int(face_w * 0.1))  # 向右扩展10%
-                
-                # 提取面部区域
-                face_img = frame[y1:y2, x1:x2]
-            
-            # 分析表情
+            # 匹配该人物对应的人脸框并获取情绪
             dominant_emotion = "unknown"
             emotion_scores = {}
-            emotion_focus_score = 0.5  # 默认值
-            
-            if face_img is not None and face_img.size > 0:
-                dominant_emotion, emotion_scores, emotion_focus_score = self._analyze_emotion(face_img)
+            emotion_focus_score = 0.5
+
+            matched_face = None
+            if boxes is not None and i < len(boxes):
+                matched_face = self._match_face_to_person(boxes[i], faces_info)
+
+            if matched_face is not None:
+                dominant_emotion = matched_face.get('dominant_emotion', 'unknown')
+                emotion_scores = matched_face.get('emotion', {})
+                emotion_focus_score = self.emotion_focus_map.get(dominant_emotion, 0.5)
+            else:
+                # 回退：用人物框裁剪区域进行单独分析（确保仍可得到情绪）
+                print(f"未匹配到人脸框，回退到人物框分析，人物框索引 {i}")
+                if boxes is not None and i < len(boxes):
+                    x1, y1, x2, y2 = map(int, boxes[i][:4])
+                    face_h = y2 - y1
+                    face_w = x2 - x1
+                    y1 = max(0, y1 - int(face_h * 0.1))
+                    x1 = max(0, x1 - int(face_w * 0.1))
+                    x2 = min(frame.shape[1], x2 + int(face_w * 0.1))
+                    face_img = frame[y1:y2, x1:x2]
+                    if face_img is not None and face_img.size > 0:
+                        dominant_emotion, emotion_scores, emotion_focus_score = self._analyze_emotion(face_img)
             
             # 计算综合专注度
             combined_focus_score = self._calculate_combined_focus(pose_focus_score, emotion_focus_score)
@@ -348,9 +476,45 @@ class FocusDetector:
                 yolo_keypoints=result.keypoints,
             )
         
-        self.focus_data.append(frame_data)
+        with self._state_lock:
+            self.focus_data.append(frame_data)
         
         return vis_img, frame_data
+
+    def process_frame_async(self, frame):
+        """
+        异步提交帧进行并行处理，返回Future。
+        使用内部模型池动态分配可用模型实例，保证线程安全。
+        """
+        # 申请一个可用的模型索引
+        model_idx = self._model_queue.get()
+
+        def _worker(frm, idx):
+            try:
+                model = self.models[idx]
+                return self.process_frame(frm, model_override=model)
+            except Exception as e:
+                # 发生错误时返回占位结果，避免阻塞
+                placeholder = frm
+                err_frame_data = {
+                    'frame': -1,
+                    'timestamp': time.time(),
+                    'students': [],
+                    'error': str(e)
+                }
+                return placeholder, err_frame_data
+            finally:
+                # 模型归还到队列
+                self._model_queue.put(idx)
+
+        return self._executor.submit(_worker, frame, model_idx)
+
+    def shutdown(self):
+        """关闭线程池并进行资源清理"""
+        try:
+            self._executor.shutdown(wait=True)
+        except Exception:
+            pass
     
     def process_video(self, video_path, output_path=None, csv_path=None, process_interval=1):
         """

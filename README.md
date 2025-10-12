@@ -5,7 +5,7 @@
 ![Flask](https://img.shields.io/badge/Flask-2.0+-orange)
 
 FocusVision 是一个基于计算机视觉的课堂专注度检测系统，能够通过分析视频中学生的面部表情和头部姿态，实时评估和记录学生的专注状态，为教学评估和课堂管理提供数据支持。系统利用YOLO姿态检测和DeepFace表情分析，综合计算专注度评分，并通过Web界面展示实时分析结果与数据可视化。
-
+<img src="image/demo.png" alt="Demo" width="1200" style="display: block; margin: 0 auto;"/>
 ## 🌟 主要功能
 
 - **多种视频输入支持**：
@@ -62,17 +62,24 @@ git clone https://github.com/zpyc1oud/FocusVision.git
 cd FocusVision
 ```
 
-2. 创建并激活Conda环境：
+2. 使用 Conda 创建并激活支持 GPU 的环境，并安装深度学习框架（先装GPU版本的 PyTorch 与 TensorFlow）：
 
 ```bash
-conda env create -f environment.yml
-conda activate FocusVision
+# 创建并激活环境（建议 Python 3.9）
+conda create -n focusvision python=3.9 -y
+conda activate focusvision
+
+# 安装 PyTorch GPU（示例：CUDA 12.1），需 NVIDIA 显卡与正确的驱动
+conda install pytorch torchvision torchaudio pytorch-cuda=12.1 tensorflow -c pytorch -c nvidia
+
+# 验证 GPU 是否可用
+python -c "import torch, tensorflow as tf; print('Torch GPU:', torch.cuda.is_available()); print('TF GPUs:', tf.config.list_physical_devices('GPU'))"
 ```
 
-3. 确保CUDA环境正确配置（GPU加速）：
+3. 安装其他依赖库（在完成 GPU 框架安装后再进行）：
 
 ```bash
-python -c "import torch; print('GPU可用:', torch.cuda.is_available())"
+pip install -U ultralytics deepface opencv-python pandas numpy matplotlib flask tf-keras
 ```
 
 ### 运行应用
